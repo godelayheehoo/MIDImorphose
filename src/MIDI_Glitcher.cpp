@@ -1,0 +1,1607 @@
+/*
+  MIDI_repeater_midiClock_v7.ino
+  Stutters (loops) midi on pressing button.  One bank of dipswitches controls active midi channels (treating drum and synth seperately, see below), 
+  the other controls timing as follows (base-2 interpretation, power is switch_number-1):
+
+  case 0: pulseResolution = 3;  break;   // 1/32 note
+  case 1: pulseResolution = 6;  break;   // 1/16 note
+  case 2: pulseResolution = 8;  break;   // 1/8 triplet
+  case 3: pulseResolution = 12; break;   // 1/8 note
+  case 4: pulseResolution = 16; break;   // dotted 1/8 note (1/8 + 1/16)
+  case 5: pulseResolution = 18; break;   // 3/16 note
+  case 6: pulseResolution = 24; break;   // 1/4 note
+  case 7: pulseResolution = 48; break;   // 1/2 note
+
+The buffer that holds midi events is large but not unlimited.  On a MEGA, it holds 8*48=384 midi note on/off events.  You actually get a little more than that due to some optimization.
+The warning LED will blink 4 times if you are writing to a full buffer (which will cause the oldest notes to be dropped).
+
+A MIDI PANIC button is available to kill stuck or errant notes.  A bug I haven't been able to pin down will occasionally cause unsequenced/played notes to randomly play. These are 
+often outside of the valid MIDI range, so your device's behavior is not predictable. 
+
+To update the DRUM MIDI channel settings, set the dipswitches and press the red button. TO do the same for synths, press the green button. Note channels can also be both or neither.
+Drum channels (TODO) feature instrument swapping (TODO: set note range)
+Synth channels (TODO) feature note jitter
+Both channels are affected by timestretching
+TRICK: note that *while stuttering* you can manipulate which channels are on. You can thus stutter the whole thing and then let drums through by changing the relevant
+channel to off and updating.  There's nuance here though-- the stuttered notes will remain, but you can play on top of what's stuttered, which can create cool effects
+
+*/
+
+//todo:
+//- handle errant note problem
+// - make it so that if the midi channel is NOT selected, we just pass through the notes even when stuttering?  This may require significant rewriting. Not positive we want that.
+// I guess so.  We'll save this for when we're actually sending midi through the hub though, so we can test with multiple instruments.s
+// - figure out the "release freakout" behavior (maybe related to #2 here)
+// calulate the average of the last set of empty note-durations (end events) and average them to find pulseDuration, which is then used to mark the playback Loop duration.
+//todo: try changing time to uint16_t (you'll need to use relative time), try changing time to be synced to clock pulses (byte/uint8_t).
+//add LED that blinks when we try to add a note to a full events buffer (or just is on when the events buffer is full?)
+//todo: timestretch
+//todo: pitch shift?  But consider how that'd interact with drumss
+//change more ints to bytes?
+//todo: config mode?  Maybe not necessary with current setup
+//todo: consider updating display to reflect changes to pulseResolution?
+//todo: I don't like that panic displays panic and then to get back to a normal display I have to re-set drum or synth assignments via the buttons+dipswitches.  Though maybe that's okay.
+//todo: create a "hold display" button that lets me have some message show for 2 seconds or whatever then go back to whatever I want my default to be
+//todo: it's kind of cool when I lower the events buffer way low and loop off of that, maybe make that something you can turn on/off
+//todo: Figure out how I want to handle drum note numbers (for equivalent to jitter).  Could assign them per channel and "know" some like the dbi's, could also "learn" them per-channel (could get memory heavy)
+//todo: update code to use the createOffNote() function where appropraite
+//todo: Retrigger OPTIONALLY affecting synths, only affecting drums
+#include <Arduino.h>
+#include <CircularBuffer.h>
+//midi stuff
+#include <MIDI.h>
+MIDI_CREATE_INSTANCE(HardwareSerial, Serial1, MIDI);
+
+//display stuff
+//- OLED Screen
+#include <Adafruit_GFX.h>
+#include <Adafruit_SSD1306.h>
+#define SCREEN_WIDTH 128
+#define SCREEN_HEIGHT 64
+#define OLED_RESET -1
+Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
+//- TM1637 (7-seg) screen
+#include <TM1637Display.h>
+#define CLK 11//pins definitions for TM1637 and can be changed to other ports       
+#define DIO 10
+TM1637Display seg7display(CLK, DIO); 
+
+//controls interaction stuf
+//debug stuff
+#define DEBUG
+#define ACTIVE_NOTES_DEBUG
+#define PLAYBACK
+
+//Serial comms with nano
+// #include "rx_message_handling.h"
+// ParsedMessage msg;
+
+
+//button helper -- not currently used for most buttons
+struct ButtonHelper{
+  int pinNumber;
+  bool buttonState = false;
+  bool lastButtonState = false;
+
+  bool update()//returns edge
+  {
+  lastButtonState = buttonState;
+  buttonState = digitalRead(pinNumber) == LOW;
+  // Return true only if button was just pressed
+  return (buttonState && !lastButtonState);
+  }
+};
+
+//buttons using helper
+// ButtonHelper playButton;
+// const int playPin = 13;
+
+
+const int LOG_BUTTON = 12;
+bool logButtonState = false;
+bool prevLogButtonState = false;
+
+
+//useful macros
+#define BETWEEN(x, lo, hi) ((x) >= (lo) && (x) <= (hi))
+
+//constants
+const int MAX_PULSES_PER_STUTTER = 48;  //24 pulses -> 1 quarter note
+//ChatGPT says I can get away with 8 max events per pulse. I'll try 16 for now.  Trying to cut down on memory.
+//This could be set as a function of MAX_PULSES_PER_STUTTER
+const int MAX_EVENTS = 8 * MAX_PULSES_PER_STUTTER;
+// const int MAX_EVENTS = 100; //testing
+// const int MAX_EVENTS = 5;
+
+
+const byte BUFFER_FULL_LED_BLINK_TIME = 20;
+const byte BUFFER_FULL_LED_BLINK_COUNT = 4; //needs to be twice the number of blinks
+
+const float MIN_STRETCH_INTERVAL_UPDATE = 200;
+const int MAX_INSTRUMENTS = 16;
+
+//TODO: Set scale based on dipswitches, including "no scale" as option
+//TODO: Note glitch always or just when stuttering? Let's go with always for now?
+//TODO: turn off octave switching... as an indepdent thing? or just when NO_OFFSETS is selected?
+//TODO: Maybe don't always have 0 octave glitching as an option?
+//TODO: We shouldn't be doing +/-2 notes, we should do +2 notes or +2-12=-10 notes.
+struct OffsetSet {
+    const byte* offsets;
+    size_t size;
+};
+//TODO: per brett we should change the octave OR add an offset?
+const byte NO_OFFSETS[1] = {0};
+const byte ANY_OFFSETS[12] = {0,1,2,3,4,5,6,7,8,9,10,11};
+const byte MAJOR_OFFSETS[6] = {2, 4, 5, 7, 9, 11};
+const byte BRETT_OFFSETS[3] = {7, 14, 21}; //+14 is a different octave, which is apparently important.  So this wil jump from 1-4 octaves, not 0-3
+// create OffsetSet instances
+const OffsetSet NO_SET = { NO_OFFSETS, 1 };
+const OffsetSet ANY_SET = { ANY_OFFSETS, 12 };
+const OffsetSet MAJOR_SET = { MAJOR_OFFSETS, 6 };
+const OffsetSet BRETT_SET = {BRETT_OFFSETS, 3};
+
+const OffsetSet* currentOffsetSet = &NO_SET;
+
+// const byte DRUM_NUMBERS[] = {};
+
+const byte NOTE_NUMBER_JITTER_PROB = 2; //this is out of 100.  Tie this to a menu feature later I think. This should be kept pretty low usually
+const byte JITTER_BUFFER_SIZE = 64;
+
+const byte RETRIGGER_PROB = 10; 
+const byte RERETRIGGER_PROB = 50;
+const byte RETRIGGER_BUFFER_SIZE = 32;
+const byte RETRIGGER_TIME = 50; // could do min/max if we wanted to. This is the delay time between ntoes
+const byte RETRIGGER_NOTE_LENGTH = 50; //doesn't matter for drums, might for samples, does for synth
+
+const byte PITCHBEND_PROB_1000000000 = 3; //note: this is x/a billion not x/100 like normal.  Then we do the check three times!
+const byte NUM_ACTIVE_PITCHBENDS = 4;
+const bool PITCHBEND_ACTIVE = true;
+
+//working pulse resolution size, we start with a quarter note (max pulses per stutter)
+int pulseResolution = MAX_PULSES_PER_STUTTER;
+int oldPulseResolution = pulseResolution;
+// --- LED Pins ---
+const int bufferLedPin  = 7; 
+
+// --- Button pins ---
+const int stutterButtonPin = 2;
+const int panicButtonPin = 3;
+const int drumMIDIButtonPin =  8;// the red button
+const int synthMIDIButtonPin = 9; // the green button
+
+// --- Tempo Dipswitch pins ---
+const byte onesTempoPin = 4;
+const byte twosTempoPin = 5;
+const byte foursTempoPin = 6;
+
+// --- "Scale"/Offset dipswitch pins
+const int onesOffsetPin = 23;
+const int twosOffsetPin = 24;
+const int foursOffsetPin = 26;
+
+// --- Potentiometer Pins ---
+int stretchPotPin = A0;
+
+// --- Loop buffer ---
+struct MidiEvent {
+  byte type;  // 0x90=noteOn, 0x80=noteOff, 0x00=pseudo-event
+  byte channel;
+  byte note;
+  byte velocity;
+  byte pulseNumber;
+  unsigned long playTime;  // relative time from pulse? Or maybe we should use time from the starting pulse in the ring buffer, in which case this should be abs time. Going with latter.
+  bool played;
+};
+
+struct JitteredNote {
+  byte originalNote;
+  byte newNote;
+  byte channel;
+};
+
+struct PitchBender {
+    byte channel;
+    int16_t currentBend = 0;
+    int16_t minBend;
+    int16_t maxBend;
+    byte numBendPasses;
+    bool directionForward;
+
+    long lastUpdate = 0;
+    int bendStepInterval;   // ms between updates
+    int bendStepSize;       // step size per update
+
+    int pickRandomBend() {
+        int bend;
+        do {
+            bend = random(-8192, 8192);
+        } while (bend >= -800 && bend <= 800);
+        return bend;
+    }
+
+    PitchBender() : channel(0), currentBend(0), bendStepInterval(20), bendStepSize(5),
+                    minBend(0), maxBend(0), numBendPasses(0), directionForward(true) {}
+
+    PitchBender(byte ch) : channel(ch) {
+        int a = pickRandomBend();
+        int b = pickRandomBend();
+
+        minBend = min(a, b);
+        maxBend = max(a, b);
+        bendStepInterval = random(5, 30);  // update interval in ms
+        bendStepSize = random(5, 100);     // pitch increment per step
+        numBendPasses = random(1, 5);      // number of passes (up or down = 1 pass)
+        directionForward = (random(2) == 1);
+        currentBend = directionForward ? minBend : maxBend;
+        lastUpdate = millis();
+
+        sendBend(); // start immediately
+    }
+
+    void update() {
+        if (numBendPasses == 0) return;
+
+        long now = millis();
+        if (now - lastUpdate >= bendStepInterval) {
+            lastUpdate = now;
+
+            if (directionForward) {
+                currentBend = min(currentBend + bendStepSize, maxBend);
+                if (currentBend == maxBend) {
+                    directionForward = false;
+                    numBendPasses--;
+                }
+            } else {
+                currentBend = max(currentBend - bendStepSize, minBend);
+                if (currentBend == minBend) {
+                    directionForward = true;
+                    numBendPasses--;
+                }
+            }
+
+            sendBend();
+        }
+    }
+
+    void sendBend() {
+        MIDI.sendPitchBend(currentBend, channel);
+    }
+
+    void finishBend() {
+        MIDI.sendPitchBend(0, channel);
+    }
+};
+
+
+// --- Buffers ---
+CircularBuffer<MidiEvent, MAX_EVENTS> eventsBuffer;
+CircularBuffer<unsigned long, MAX_PULSES_PER_STUTTER> pulseStartTimes;
+CircularBuffer<MidiEvent, RETRIGGER_BUFFER_SIZE> retriggerBuffer; //maybe change this to "delayedNotesBuffer" if we end up doing that (holding back some notes for a little)
+CircularBuffer<PitchBender, NUM_ACTIVE_PITCHBENDS> pitchbendBuffer;
+JitteredNote jitterBuffer[JITTER_BUFFER_SIZE];
+int jitterCount = 0;
+
+// // DEBUG BUFFER
+// const int NUM_PULSES = 48;
+// const int EVENTS_PER_PULSE = 5;
+
+// CircularBuffer<unsigned long, EVENTS_PER_PULSE> debugBuffer[NUM_PULSES];
+// // int debugCounter[48] = {0};
+
+// --- Script states ---
+bool isLooping = false;
+bool prevLooping = false;
+
+// Generic blink state variables (can be reused by other blink routines)
+unsigned long blinkStartTime = 0;
+int blinkStep = 0;
+const int blinkPatternLength = 5;
+bool isBlinking = false;
+
+
+// --- Button states ---
+bool stutterButtonPressed = false;
+bool prevStutterPressed = false;
+bool panicButtonPressed = false;
+bool prevPanicPressed = false;
+bool drumMIDIButtonPressed = false;
+bool prevDrumMIDIButtonPressed = false;
+bool synthMIDIButtonPressed = false;
+bool prevSynthMIDIButtonPressed = false;
+
+// --- Dipswitch states ---
+bool onesTempoPinUp;
+bool twosTempoPinUp;
+bool foursTempoPinUp;
+byte tempoDipswitchVal;
+
+bool onesOffsetPinUp;
+bool twosOffsetPinUp;
+bool foursOffsetPinUp;
+byte offsetDipswitchVal;
+
+// --- Pot States --- 
+int stretchPotValueLiteral = 0;
+float stretchPotValueFloat = 0;
+float stretchValue = 1.0;
+float oldStretchValue = 1.0;
+float lastTimeStretchPotUpdated = 0;
+
+//these encode the midi dipswitch states
+// uint16_t oldDrumState = 0;
+uint16_t oldSynthState = 0;
+uint16_t newSynthState = 0;
+uint16_t oldDrumState = 0;
+uint16_t newDrumState = 0;
+
+
+//loop control states
+unsigned long loopStartTime;
+bool loopInitialized = false;
+unsigned long playbackStartTime;
+unsigned long playbackEndTime;
+unsigned long playbackLength;
+int currentPulse = 0;
+
+//misc constants & states
+const byte MIDI_NOOP = 0x00;
+const int DEBOUNCE_MS = 50;
+unsigned long lastStutterChange = 0;
+unsigned long lastButtonChangeTime = 0;
+MidiEvent dummyEvent;
+unsigned long dummyTime;
+// bool MIDIPlayState = true; //NOTE: This MAY be reversed from what it technically says!  We won't actually know if it's started or stopped when we start the arduino.
+//TODO: figure out why this isn't working.
+//midi channels
+// Map MIDI channels 1–16 to pins
+const uint8_t midiPins[16] = {
+  35,  // channel 1
+  37,  // channel 2
+  39,  // channel 3
+  41,  // channel 4
+  43,  // channel 5
+  45,  // channel 6
+  47,  // channel 7
+  49,  // channel 8
+  51,  // channel 9
+  53,  // channel 10
+  52,  // channel 11
+  50,  // channel 12
+  48,  // channel 13
+  46,  // channel 14
+  44,  // channel 15
+  42   // channel 16
+};
+// Array to track which channels are ON
+
+//todo: switch this to the two arrays below and a check on those.
+// bool midiChannelActive[16];
+bool drumMIDIenabled[16]  = {
+  false, false, false, false,
+  false, false, false, false,
+  false, true, true, true,
+  false, false, false, false
+};
+bool synthMIDIenabled[16]=  {
+  true, true, true, true,
+  true, true, true, true,
+  true, false, false, false,
+  false, false, false, false
+};
+
+
+#ifdef ACTIVE_NOTES_DEBUG
+//debug stuff
+const int MAX_NOTES = 256;
+//there's only 128 midi notes but we're erroneously seeing notes greater than that, so we need a buffer to handle those as well.
+bool activeNotes[MAX_NOTES] = { false };
+#endif
+
+// --- Menu States ---
+bool retriggerOn = false; //todo: add to menu
+bool synthJitterOn = false; //todo: add to menu
+byte octaveShiftOption = 0;
+/*
+Octave shift options: 
+  0: No Octave Shift
+  1: Shift only fundamentals
+  2: Shift on all
+*/
+
+// --- helper functions ---
+
+//properly, we should be able to just do sendNoteON, but why risk it.
+void forwardNote(MidiEvent event) {
+
+  if (event.type == MIDI_NOOP) {
+    return;
+  }
+
+//going to get screwy with CC and other non-notes probably's probably
+  #ifdef ACTIVE_NOTES_DEBUG
+      if (!activeNotes[event.note]) {
+        Serial.print("Saw note#");
+        Serial.print(event.note);
+        Serial.print(" channel#");
+        Serial.println(event.channel);
+        activeNotes[event.note] = true;
+      }
+  #endif
+
+  if(event.type==midi::NoteOn){
+    MIDI.sendNoteOn(event.note, event.velocity, event.channel);
+  } else if(event.type==midi::NoteOff){
+    MIDI.sendNoteOff(event.note, 0, event.channel);
+  }
+}
+
+void midiPanic() {
+  for (int ch = 1; ch <= 16; ch++) {
+    MIDI.sendControlChange(123, 0, ch);
+  }
+}
+
+bool checkIfMIDIOn(byte channel_num){
+  if(channel_num==0){return true;}
+  if(channel_num>16){
+    Serial.println("Got invalid channel!"); 
+    return false;}
+  return drumMIDIenabled[channel_num-1]||synthMIDIenabled[channel_num-1];
+}
+
+void killTrackedChannelsNotes(){
+  for(int ch=1; ch<=16; ch++){
+    if(checkIfMIDIOn(ch)){
+      MIDI.sendControlChange(123,0,ch);
+    }
+  }
+}
+
+byte pickRandomElement(const byte arr[], byte arrSize) {
+    byte index = random(0, arrSize);
+    return arr[index];
+}
+
+//this should be passed in synthMIDIEnabled or drumMIDIEnabled. Or, maybe later, we'll combine the two? 
+//note it only works for channel arrays though, it requires size 16
+byte getRandomActiveChannel(const bool arr[16]) {
+    int selected = -1;
+    int n = 0; // number of active channels seen so far
+
+    for (int i = 0; i < 16; i++) {
+        if (arr[i]) {
+            if (random(++n) == 0) { // pick this one with probability 1/n
+                selected = i+1;
+            }
+        }
+    }
+
+    if (selected == -1) {
+        Serial.println("Invalid channel returned!");
+        return 255; // no active channel
+    }
+
+    return selected;
+}
+
+
+MidiEvent createOffNote(MidiEvent note, long timeOff = millis()){
+  //todo: how do we want to handle non-note midi events?
+  //currently we'll just... pass through? Which we'll also do for off notes. But of course make sure we don't do that. 
+  if(note.type!=midi::NoteOn){return note;}
+  MidiEvent offNote;
+  offNote.type = midi::NoteOff;
+  offNote.note = note.note;
+  offNote.channel = note.channel;
+  offNote.velocity = note.velocity;
+  offNote.playTime = timeOff;
+  offNote.played = false;
+  offNote.pulseNumber = note.pulseNumber; //this *could* get fucky-wucky, pay attention if this matters.
+  return offNote;
+}
+
+bool randomProbResult(byte success_rate, long upper_bound = 100){
+  byte random_num = random(0,upper_bound);
+  return random_num<success_rate;
+}
+
+byte randomOctave() {
+  byte random_num = random(100); // 0–99
+
+  if (random_num >= 90) return 2; // 90–99 → 10%
+  if (random_num >= 60) return 1; // 60–89 → 30%
+  return 0;                        // 0–59 → 60%
+}
+
+//function prototypes
+void playSavedPulses();
+
+
+bool readStutterButton();
+
+byte readTempoDipswitch();
+byte readOffsetDipswitch();
+void updateOffsetSwitches();
+
+void clearOldNotes(int expiredPulse);
+
+MidiEvent createEmptyEvent(byte pulseNumber);
+
+void handleClock();
+
+void triggerBufferFullBlink();
+void updateBufferFullBlink();
+void checkPulseBufferFullSetLED();
+
+void updateSynthSwitches();
+void updateDrumSwitches();
+
+void setupDisplay();
+void drawSDMatrix(bool drumArr[16], bool synthArr[16]);
+void drawStretchDisplay();
+
+void recoverDisplay();
+bool safeDisplay();
+
+void cueRetriggeredNote(MidiEvent me);
+void playRetriggeredNotes();
+
+void pruneFinishedBends();
+void pushBend(int channel);
+void updateBends();
+bool checkForNoteOn(byte noteOffNumber);
+void startBufferFullBlink();
+void pruneBends();
+
+MidiEvent maybeNoteNumberJitter(MidiEvent event);
+
+
+// void processMessage(const ParsedMessage &msg);
+
+void setup() {
+  // put your setup code here, to run once:
+  Serial.begin(115200);
+  Serial.println("Setting up serial2");
+  Serial2.begin(115200); 
+
+  Serial.println("Starting setup");
+
+  Serial.println("Entering setup display");
+  //display setup
+  setupDisplay();
+  Serial.println("Drawing SD Matrix");
+  drawSDMatrix(drumMIDIenabled, synthMIDIenabled);
+  Serial.println("Setting pins");
+  pinMode(stutterButtonPin, INPUT);
+  pinMode(panicButtonPin, INPUT_PULLUP);
+  pinMode(onesTempoPin, INPUT_PULLUP);
+  pinMode(twosTempoPin, INPUT_PULLUP);
+  pinMode(foursTempoPin, INPUT_PULLUP);
+  pinMode(onesOffsetPin, INPUT_PULLUP);
+  pinMode(twosOffsetPin, INPUT_PULLUP);
+  pinMode(foursOffsetPin, INPUT_PULLUP);
+  pinMode(bufferLedPin, OUTPUT);
+  pinMode(drumMIDIButtonPin, INPUT_PULLUP);
+  pinMode(synthMIDIButtonPin, INPUT_PULLUP);
+  pinMode(LOG_BUTTON,INPUT_PULLUP);
+  // pinMode(playPin, INPUT_PULLUP);
+  // playButton.pinNumber = playPin;
+
+  digitalWrite(bufferLedPin, HIGH);
+  delay(100);
+
+  Serial.println("Turning on MIDI");
+  MIDI.begin(MIDI_CHANNEL_OMNI);
+  MIDI.turnThruOff();
+
+
+
+  //setup midi channels -- edit later for S&D arrays.
+  for (int i = 0; i < 16; i++) {
+    pinMode(midiPins[i], INPUT_PULLUP);
+  }
+
+Serial.println("Drawing SD matrix again (why?)");
+//setup OLED
+  drawSDMatrix(drumMIDIenabled, synthMIDIenabled); 
+//setup 7seg-- 0x0f is 15.
+  seg7display.setBrightness(0x0f); 
+
+//TODO: set this, note lack of semicolon to force error
+//TEST -- just write a number
+  drawStretchDisplay();
+
+  digitalWrite(bufferLedPin, LOW);
+
+  updateOffsetSwitches();
+
+  ///controls arduino interaction
+  // Wire.begin(SLAVE_ADDR);      // join secondary I2C bus as slave
+  // Wire.onReceive(conrolsReceiveEvent); 
+  // Wire.onRequest(controlsRequestEvent); 
+
+  Serial.println("Ending setup");
+  
+  
+}
+
+void loop() {
+  //check for incoming nano messages
+    //   if (readSerial2NonBlocking(msg)) {
+    //     processMessage(msg); // your function in .ino
+    // }
+ 
+  //////Button & switch reads
+
+  logButtonState = digitalRead(LOG_BUTTON)==HIGH;
+
+  stutterButtonPressed = readStutterButton();
+  panicButtonPressed = digitalRead(panicButtonPin) == HIGH;
+
+//trying making these low
+  drumMIDIButtonPressed = digitalRead(drumMIDIButtonPin)==HIGH;
+  synthMIDIButtonPressed = digitalRead(synthMIDIButtonPin)==HIGH;
+
+  if(drumMIDIButtonPressed&&!prevDrumMIDIButtonPressed){
+    Serial.println("Drum button pressed!");
+    updateDrumSwitches();
+  }
+  if(synthMIDIButtonPressed && !prevSynthMIDIButtonPressed){
+    Serial.println("Synth button pressed!");
+    updateSynthSwitches();
+  }
+
+// read switches and build new state
+  //get pot value
+  stretchPotValueLiteral = analogRead(stretchPotPin);
+  stretchPotValueFloat = 0.1 + 3.9*(stretchPotValueLiteral/1023.0);
+//smoothing
+  stretchValue =  0.95 * stretchValue + 0.05 * stretchPotValueFloat;
+
+  if(millis()-lastTimeStretchPotUpdated>MIN_STRETCH_INTERVAL_UPDATE){
+   if(fabs(oldStretchValue - stretchValue)>0.05){
+    // Serial.println(stretchValue);
+    oldStretchValue = stretchValue;
+    lastTimeStretchPotUpdated = millis();
+    drawStretchDisplay();
+   }
+  }
+
+  //tempo dipswitch
+  tempoDipswitchVal = readTempoDipswitch();
+
+  //get pulse resoution from tempoDipswitchVal
+switch(tempoDipswitchVal) {
+  case 0: pulseResolution = 3;  break;   // 1/32 note
+  case 1: pulseResolution = 6;  break;   // 1/16 note
+  case 2: pulseResolution = 8;  break;   // 1/8 triplet
+  case 3: pulseResolution = 12; break;   // 1/8 note
+  case 4: pulseResolution = 16; break;   // dotted 1/8 note (1/8 + 1/16)
+  case 5: pulseResolution = 18; break;   // 3/16 note
+  case 6: pulseResolution = 24; break;   // 1/4 note
+  case 7: pulseResolution = 48; break;   // 1/2 note
+}
+
+updateOffsetSwitches();
+
+  ///////Panic button logic
+  if (panicButtonPressed && !prevPanicPressed) {
+    midiPanic();
+#ifdef DEBUG
+    Serial.println("Panic!");
+#endif
+  recoverDisplay();
+
+  // --- Draw "PANIC!" centered on top ---
+    const char* panicMsg = "PANIC!";
+    display.setTextSize(2);              // adjust size to fit
+    display.setTextColor(SSD1306_WHITE);
+
+    int16_t x1, y1;
+    uint16_t w, h;
+    display.getTextBounds(panicMsg, 0, 0, &x1, &y1, &w, &h);
+
+    int x = (display.width() - w) / 2;
+    int y = (display.height() - h) / 2;
+
+    display.setCursor(x, y);
+    display.println(panicMsg);
+
+    // Push buffer to the screen
+    display.display();
+  }
+
+  // if(playButton.update()){
+  //   //first press may not work, MIDIPlayState may be misleading
+  //   Serial.println("play button pressed!");
+  //   if(MIDIPlayState){
+  //     // MIDI.sendRealTime(midi::Stop);
+  //     Serial.println("Stop!");
+  //     MIDI.sendStop();
+  //   }
+  //   else{
+  //     // MIDI.sendRealTime(midi::Start);
+  //     Serial.println("start!");
+  //     MIDI.sendStart();
+  //   }
+  // MIDIPlayState = !MIDIPlayState;
+  // }
+
+  ///check if pulse resolution has changed and respond appropriately. If the new resolution is bigger, we have no problem. If it's smaller, we clear out the bad notes & start times.
+  if (pulseResolution < oldPulseResolution) {
+    //clear out extra notes
+    for (int i = 1; i < pulseResolution + 1; i++) {
+      int removalIndex = (currentPulse + i) % oldPulseResolution;
+      clearOldNotes(removalIndex);
+    }
+    // //clear out extra start times
+    // Serial.print("On pulse#");
+    // Serial.println(currentPulse);
+    for (int i = 0; i < oldPulseResolution - pulseResolution; i++) {
+    //   Serial.print("Removing the");
+    //   Serial.print(i);
+    //   Serial.print("nth pulse, now have");
+      pulseStartTimes.pop(dummyTime);
+    //   Serial.println(pulseStartTimes.size());
+
+    }
+  }
+
+  ///stutter button is pressed
+  if (stutterButtonPressed && !prevStutterPressed) {
+    
+    digitalWrite(bufferLedPin,LOW);
+    //
+    //kill existing notes on tracked channels
+    killTrackedChannelsNotes();
+    loopStartTime = millis();
+    //debug
+    // Serial.print("set loopStartTime to:");
+    // Serial.println(loopStartTime);
+    isLooping = true;
+        //debug
+    // Serial.print("<<<<<<<<NEW STUTTER: pst:");
+    // Serial.print(playbackStartTime);
+    // Serial.println(">>>>>>>>>>>>>>");
+  }
+
+  ///stutter button is released
+  if (!stutterButtonPressed && prevStutterPressed) {
+    isLooping = false;
+    killTrackedChannelsNotes();
+    //clear out stored notes
+    while (!eventsBuffer.empty()) {
+      eventsBuffer.pop(dummyEvent);
+    }
+    while(!pulseStartTimes.empty()){
+      pulseStartTimes.pop(dummyTime);
+    }
+  }
+
+  //check if button state has changed at all
+  if (stutterButtonPressed != prevStutterPressed) {
+    lastButtonChangeTime = millis();
+    // #ifdef DEBUG
+    // Serial.print("# pulses in pulseStartTimes:");
+    // Serial.print(pulseStartTimes.size());
+    // Serial.print(", pulse resolution: ");
+    // Serial.println(pulseResolution);
+    // #endif
+  }
+
+////////////////////////End button-switch stuff////////////////////////
+
+//pre-note loop logic
+if(isLooping){}
+//pre-note nonloop logic
+else{
+  if(PITCHBEND_ACTIVE){
+  //maybe create a new pitchbender
+  if(randomProbResult(PITCHBEND_PROB_1000000000, 1000000000)&&randomProbResult(PITCHBEND_PROB_1000000000, 1000000000)&&randomProbResult(PITCHBEND_PROB_1000000000, 1000000000)){
+    byte bendChannel = getRandomActiveChannel(synthMIDIenabled);
+    if(bendChannel!=255){
+    pushBend(bendChannel);
+    }
+    // Serial.println(bendChannel);
+  }
+  updateBends();
+  }
+  // check if pulseREsolution buffer is full
+  checkPulseBufferFullSetLED();
+  updateBufferFullBlink();
+}
+
+  //read midi
+  if(MIDI.read()){
+    //skip the read if we've JUST changed the stutter button state
+    if (millis() - lastButtonChangeTime < 50) {
+        return;
+      }
+    //check if clock
+    byte type = MIDI.getType();
+      //clock pulse logic
+      if (type == midi::Clock) {
+
+        //we "handle the clock, which JUST means rotating out the eventsBuffers, only if we're not looping. If not looping, no new notes get appended anyway.
+        if(!isLooping){
+        handleClock();
+        }
+      }
+      //non-clock handling
+      else{
+        byte channel = MIDI.getChannel();
+        //pass through notes if we're on an untracked channel OR if looping is off
+      if(!isLooping||!checkIfMIDIOn(channel)){
+        if (type == midi::NoteOn || type == midi::NoteOff) {
+          byte note = MIDI.getData1();
+          byte velocity = MIDI.getData2();
+          //create a new midiEvent
+          MidiEvent newEvent = MidiEvent();
+          newEvent.type = type;
+          newEvent.channel = channel;
+          newEvent.note = note;
+#ifdef DEBUG
+            if (note > 127) {
+              Serial.print("READ OUT OF BOUNDS NOTE:");
+              Serial.print(note);
+              Serial.print(" Loop State:");
+              Serial.print(isLooping);
+              Serial.print(" Channel: ");
+              Serial.println(channel);
+            }
+#endif
+          newEvent.velocity = velocity;
+          newEvent.playTime = millis();
+          newEvent.played = false;
+          newEvent.pulseNumber = currentPulse;
+
+          //maybe jitter the note
+          //we adjust for both note on and note off in case later glitches care about note off (though that is unlikely).
+          if(synthJitterOn && synthMIDIenabled[channel-1]){
+          Serial.print("jittering note on channel ");
+          Serial.println(channel);
+          newEvent = maybeNoteNumberJitter(newEvent);  
+          //note the jittered note does get sent to the buffer -- change from before, which jittered within the buffer. (so now if we jitter 46->48, we stutter the 48 each time)
+          }
+
+          //if not looping AND we're on a tracked channel, add to buffer.  Two ifs because I expect to come back in here and add other sblocks
+          if(!isLooping){
+            if(checkIfMIDIOn(channel)){
+          if(type == midi::NoteOn || (type == midi::NoteOff && checkForNoteOn(newEvent.note))){
+              //check if buffer is full now
+               if ((eventsBuffer.size()==MAX_EVENTS) && !isBlinking) {
+                Serial.println("Buffer full!");
+              startBufferFullBlink();
+                }
+              //push the new event.
+              // Serial.print("Pushing event to buffer-- Note:");
+              // Serial.print(newEvent.note);
+              // Serial.print(" , Ch:");
+              // Serial.print(newEvent.channel);
+              // Serial.print(" ,v:");
+              // Serial.println(newEvent.velocity);
+              eventsBuffer.push(newEvent);
+
+              if(retriggerOn){
+              //retrigger cue logic -- works on both synth and drum currently
+              if(randomProbResult(RETRIGGER_PROB)){
+                  // Serial.println("Cued a retrigger note");
+                  cueRetriggeredNote(newEvent);
+              }
+              }
+              
+          }
+          }//end of checkIfMIDIOn
+          }//end isLooping
+          //if we're not looping OR we're on an untracked channel-- the contents of this block, pass through the note 
+
+
+        forwardNote(newEvent);
+        }//end untracked-channel-or-looping-off logic
+        else{//start of tracked channel & looping-on logic
+        //if we're on a tracked channel and we're looping, we don't do anything special here-- looping logic is below.
+        }//end tracked channel and looping-on logic
+      }
+      }//end non-clock handling    
+  }  ///end new read-midi 
+
+  //stutter behavior. This is a first attempt, we still need to quantize the playback.
+  //for now we'll just read the final pulse up until the time the button was pressed. Later we'll keep it reading until it hits the next quarter note or whatever.
+  //quantization may not be as important since we actually track silence.
+
+  if (isLooping) {//pure is looping logic (not part of midi read)
+    //if we don't have pulseResolution's worth of pulse, we don't do playback
+  //I don't think I need this flag logic, I think I *can* just return out of here.  
+  bool validLoopFlag = true;
+  if (pulseStartTimes.size() < pulseResolution) {
+    Serial.println("Insufficient number of pulses!"); 
+    validLoopFlag=false;
+    isLooping=false;
+  }
+if(validLoopFlag){
+  //starting the loop.
+   if (!prevLooping) {
+    //Mark the current time, the end of the stutter, this will make our stutter-loop duration a little less than pulseResolution*pulseDuration,
+    //which is what it should be.  A TODO will be to calculate bpm and figure out how long the stutter should last.
+
+    //we also set our Loop Start Time, we'll use this to determine when we've played through everything.
+    loopStartTime = millis();
+    Serial.print("set loop start time to: ");
+    Serial.println(loopStartTime);
+
+
+    //get the length of the playback for only the last 'pulseResolution' pulses
+    playbackStartTime = pulseStartTimes[0];
+    //this is left as-is rather than just doing playbackLenght = loopStartTime - playbackStartTime in anticipation of the bpm-estimation pulse-ending logic
+    playbackEndTime = loopStartTime;
+    //moving playbackLength setting to inside the isLooping Loop, outside of !prevLooping guard, so that it responds to movements of the stretch knob
+    }
+    playbackLength = stretchValue*(playbackEndTime - playbackStartTime);
+    // Serial.print("CurrentPulse: ");
+    // Serial.print(currentPulse);
+    // Serial.print(" OldestPulse: ");
+    // Serial.print(eventsBuffer[0].pulseNumber);
+    // int debugDiff = (currentPulse + pulseResolution - eventsBuffer[0].pulseNumber) % pulseResolution;
+    // Serial.print(" Cicular diff: ");
+    // Serial.println(debugDiff);
+    // // debugCounter[debugDiff]++;
+    // Serial.print("  Time Diff: ");
+    // Serial.println(playbackLength);
+    // debugBuffer[debugDiff].push(playbackLength);
+
+
+    playSavedPulses();
+    //if we've played through a whole loop, reset everything and kill active notes
+    if (millis() - loopStartTime > playbackLength) {
+
+      loopStartTime = millis();
+      for (int i = 0; i < eventsBuffer.size(); i++) {
+        // Iterate through all events in this pulse.  Note this resets ALL, not just the ones that are active due to pulseResolution
+        eventsBuffer[i].played = false;
+      }
+      //kill all midi Notes on tracked channels at the end of the loop (we may not have the note-offs for all our note-ons, so this is necessary)
+      killTrackedChannelsNotes();
+    }
+  }
+  }//end isLooping logic
+  //after-note pure !isLooping logic
+  else{
+    if(retriggerOn){playRetriggeredNotes();}
+  }
+//end of pure !isLoopingLogic
+
+//debug
+if(logButtonState&&!prevLogButtonState){
+//   for(int i=0; i<48; i++){
+//     Serial.print(i);
+//     Serial.print(" : ");
+//     for(int j = 0; j<debugBuffer[i].size();j++){
+//     Serial.print(debugBuffer[i][j]);
+//     Serial.print(";");
+//   }
+//   Serial.println(" ");
+// }
+}
+
+  //update previous states -- loop end
+  prevPanicPressed = panicButtonPressed;
+  prevStutterPressed = stutterButtonPressed;
+  prevLooping = isLooping;
+  prevDrumMIDIButtonPressed = drumMIDIButtonPressed;
+  prevSynthMIDIButtonPressed = synthMIDIButtonPressed;
+  oldPulseResolution = pulseResolution;
+  prevLogButtonState = logButtonState;
+
+  
+    
+  if(PITCHBEND_ACTIVE){
+  pruneBends();
+  }
+}
+
+//////////////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////////////
+////////////////////////// OTHER FUNCTIONS ///////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////////////
+
+//I'm pretty sure it's okay for this to block.
+void playSavedPulses() {
+    // Serial.print("Playing saved pulses, size:");
+    // Serial.println(eventsBuffer.size());
+
+  // Iterate through all saved pulses
+  for (int i = 0; i < eventsBuffer.size(); i++) {
+    // Iterate through all events
+
+    MidiEvent& event = eventsBuffer[i];  // Use reference to original
+    //todo: maybe fix this?s
+    // Serial.print("first pulse in events buffer:");
+    // Serial.print(eventsBuffer[0].pulseNumber);
+    // Serial.print(" sv: ");
+    // Serial.print(stretchValue);
+    // Serial.print(" ept: ");
+    // Serial.print(event.playTime);
+    // Serial.print(" pst: ");
+    // Serial.print(playbackStartTime);
+    unsigned long relative_note_time = stretchValue*(event.playTime - playbackStartTime);
+    // Serial.print(" rnt: ");
+    // Serial.print(relative_note_time);
+    unsigned long current_relative_time = millis() - loopStartTime;
+    // Serial.print(" crt: ");
+    // Serial.print(current_relative_time);
+    // Serial.print("playback start time - loop start time: ");
+    // Serial.println(loopStartTime - playbackStartTime);
+    
+    
+
+    // Now we're checking the ORIGINAL event's played status -- though I'm not convinced this matters
+    if (!event.played && current_relative_time >= relative_note_time) {
+
+      eventsBuffer[i].played = true;
+
+#ifdef ACTIVE_NOTES_DEBUG
+      if (!activeNotes[event.note]) {
+        Serial.print("Saw note#");
+        Serial.print(event.note);
+        Serial.print(" channel#");
+        Serial.println(event.channel);
+        activeNotes[event.note] = true;
+      }
+#endif
+
+      Serial.print("playing buffer event-- Note:");
+      Serial.print(event.note);
+      Serial.print(" , Ch:");
+      Serial.print(event.channel);
+      Serial.print(" ,v:");
+      Serial.println(event.velocity);
+
+      forwardNote(event);
+    }
+  }
+}
+
+
+bool readStutterButton() {
+  static bool lastButtonState = HIGH;
+  static bool buttonState = HIGH;
+  static unsigned long lastDebounceTime = 0;
+
+  bool reading = digitalRead(stutterButtonPin);
+
+  if (reading != lastButtonState) {
+    lastDebounceTime = millis();
+  }
+
+  if ((millis() - lastDebounceTime) > DEBOUNCE_MS) {
+    if (reading != buttonState) {
+      buttonState = reading;
+    }
+  }
+
+  lastButtonState = reading;
+
+  return buttonState == LOW;
+}
+
+
+byte readTempoDipswitch() {
+  onesTempoPinUp = digitalRead(onesTempoPin) == LOW;
+  twosTempoPinUp = digitalRead(twosTempoPin) == LOW;
+  foursTempoPinUp = digitalRead(foursTempoPin) == LOW;
+
+  int val = 0;
+  if (onesTempoPinUp) {
+    val += 1;
+  }
+  if (twosTempoPinUp) {
+    val += 2;
+  }
+  if (foursTempoPinUp){
+    val += 4;
+  }
+
+
+  return val;
+}
+
+byte readOffsetDipswitch(){
+  onesOffsetPinUp = digitalRead(onesOffsetPin) == LOW;
+  twosOffsetPinUp = digitalRead(twosOffsetPin) == LOW;
+  foursOffsetPinUp = digitalRead(foursOffsetPin) == LOW;
+
+  int val = 0;
+  if (onesOffsetPinUp) {
+    val += 1;
+  }
+  if (twosOffsetPinUp) {
+    val += 2;
+  }
+  if (foursOffsetPinUp){
+    val += 4;
+  }
+
+
+  return val;
+}
+void updateOffsetSwitches(){
+  //offset dipswitch
+ offsetDipswitchVal = readOffsetDipswitch();
+ //get offset array from offsetDipswitchVal
+ switch(offsetDipswitchVal) {
+  case 0:  currentOffsetSet = &NO_SET;  break; 
+  case 1:  currentOffsetSet = &ANY_SET;  break;   
+  case 2:  currentOffsetSet = &MAJOR_SET;  break;   
+  case 3:  currentOffsetSet = &BRETT_SET; break;   
+  case 4:  currentOffsetSet = &NO_SET; break;   
+  case 5:  currentOffsetSet = &NO_SET; break;   
+  case 6:  currentOffsetSet = &NO_SET; break;   
+  case 7:  currentOffsetSet = &NO_SET; break;   
+ }
+}
+
+void clearOldNotes(int expiredPulse) {
+  // Serial.print("Clearing out pulse #");
+  // Serial.println(expiredPulse);
+  eventsBuffer.removeIf([&](const MidiEvent& e) {
+    return e.pulseNumber == expiredPulse;  // use the pulse you actually want to clear
+  });
+}
+
+MidiEvent createEmptyEvent(byte pulseNumber) {
+  //create a silent end-pulse and add to
+  MidiEvent emptyEvent = MidiEvent();
+  emptyEvent.type = MIDI_NOOP;
+  emptyEvent.channel = 0;
+  emptyEvent.note = 0;
+  emptyEvent.velocity = 0;
+  emptyEvent.playTime = millis();
+  emptyEvent.played = false;
+  emptyEvent.pulseNumber = pulseNumber;
+  return emptyEvent;
+}
+
+
+void handleClock() {
+  currentPulse = (currentPulse + 1) % pulseResolution;
+  // Serial.println(currentPulse);
+  clearOldNotes(currentPulse);
+  unsigned long pulseTime = millis();
+  //once the buffer is full, remove the oldest
+  if(pulseStartTimes.size()>=pulseResolution){
+  pulseStartTimes.pop(dummyTime);
+  }
+  //add the new pulse start time
+  pulseStartTimes.push(pulseTime);
+}
+
+
+bool checkForNoteOn(byte noteOffNumber) {
+  for (int i = eventsBuffer.size() - 1; i >= 0; --i) {
+    const MidiEvent& ev = eventsBuffer[i];
+    if (ev.note == noteOffNumber) {
+      return (ev.type == midi::NoteOn);
+    }
+  }
+  // note never appeared
+  return false;
+}
+
+
+//BUFFER LED stuff
+void checkPulseBufferFullSetLED(){
+  if(isBlinking){return;}
+  if (pulseStartTimes.size() >= pulseResolution) {
+    digitalWrite(bufferLedPin, HIGH);
+  }
+  else{
+    digitalWrite(bufferLedPin,LOW);
+  
+  }
+}
+
+/// Call this frequently in loop() to pulse LED
+void updateBufferFullBlink() {
+  unsigned long now = millis();
+  
+  if (!isBlinking) return;
+  if (now - blinkStartTime >= BUFFER_FULL_LED_BLINK_TIME) {
+    blinkStep++;
+
+    if (blinkStep >= blinkPatternLength) {
+      // Done with current blink sequence
+      isBlinking = false;
+      blinkStep = 0;
+      return;
+    }
+
+    // Determine pattern based on starting LED state
+    bool ledWasOn = digitalRead(bufferLedPin);
+    bool ledState;
+
+    if (ledWasOn) {
+      // LED was on: pulse OFF-ON-OFF-ON-OFF
+      ledState = (blinkStep % 2 == 0) ? LOW : HIGH;
+    } else {
+      // LED was off: pulse ON-OFF-ON-OFF-ON
+      ledState = (blinkStep % 2 == 0) ? HIGH : LOW;
+    }
+
+    digitalWrite(bufferLedPin, ledState);
+    blinkStartTime = now;
+  }
+}
+// Call this to start a new pulse sequence
+void startBufferFullBlink() {
+  Serial.println("starting buffer full blink");
+  isBlinking = true;
+  blinkStep = 0;
+  blinkStartTime = millis();
+}
+
+///////Glitching functions (non-stutter)
+
+//pitchbend functions
+void pushBend(int channel){
+  //if we're already bending on this channel, we exit
+  for(int i = 0; i<pitchbendBuffer.size(); i++){
+    if(channel == pitchbendBuffer[i].channel){
+      return;
+    }
+  }
+  //otherwise, create a new pushbend object and stick it on
+  Serial.print(">>>>>>>>> creating bend on channel ");
+  Serial.println(channel);
+  PitchBender bend = PitchBender(channel);
+  //if we're pushing off an old pitchbend, make sure we turn it off
+  if(pitchbendBuffer.size()==NUM_ACTIVE_PITCHBENDS){
+    pitchbendBuffer[0].finishBend();
+  }
+  pitchbendBuffer.push(bend);
+}
+void updateBends(){
+  for(int i = 0; i<pitchbendBuffer.size();i++){
+    pitchbendBuffer[i].update();
+  }
+}
+
+void pruneBends(){
+    pitchbendBuffer.removeIf([](PitchBender& pitchBend){
+    if (pitchBend.numBendPasses==0) {
+        pitchBend.finishBend();
+        return true;
+    }
+    return false;
+});
+}
+
+//Jitter functions
+
+// --- Add a jittered note ---
+bool addJitteredNote(byte oldNote, byte newNote, byte channel) {
+    if (jitterCount >= JITTER_BUFFER_SIZE) {
+        // buffer full, handle warning elsewhere (LED blink)
+        return false;
+    }
+    jitterBuffer[jitterCount++] = {oldNote, newNote, channel};
+    return true;
+}
+
+// --- Remove a note matching oldNote & channel. Send the corresponding note off for any found. ---
+bool removeJitteredNote(byte oldNote, byte channel) {
+  bool removedANote = false;
+    for (int i = 0; i < jitterCount; i++) {
+        if (jitterBuffer[i].originalNote == oldNote &&
+            jitterBuffer[i].channel == channel) {
+            //turn off the jittered note
+            MIDI.sendNoteOff(jitterBuffer[i].newNote, 0, channel);
+            // shift all later elements down
+            removedANote = true;
+            for (int j = i; j < jitterCount - 1; j++) {
+                jitterBuffer[j] = jitterBuffer[j + 1];
+            }
+            jitterCount--;
+            i--; // check new element at this position
+        }
+    }
+    return removedANote;
+}
+
+// --- Find newNote(s) for a given oldNote & channel ---
+//not goign to use this function I think.  Leaving it for now so I can copy its logic
+void getJitterNewNotes(byte oldNote, byte channel, byte outNotes[], int &outCount) {
+    outCount = 0;
+    for (int i = 0; i < jitterCount; i++) {
+        if (jitterBuffer[i].originalNote == oldNote &&
+            jitterBuffer[i].channel == channel) {
+            outNotes[outCount++] = jitterBuffer[i].newNote;
+        }
+    }
+}
+MidiEvent maybeNoteNumberJitter(MidiEvent event) {
+
+    // produce a NEW MIDI note
+    MidiEvent newEvent;
+    //if it's not a note event we don't want it.  
+    if(!((event.type==midi::NoteOn) || (event.type==midi::NoteOff))){return event;}
+    //if it is a note event...
+    newEvent.channel = event.channel;
+    newEvent.velocity = event.velocity;
+    newEvent.playTime = event.playTime;
+    newEvent.played = event.played;
+    newEvent.pulseNumber = event.pulseNumber;
+
+    //first, we turn off & remove past jittered notes
+    bool removedANote = removeJitteredNote(event.note, event.channel);
+    if(removedANote && event.type==midi::NoteOff){
+      //if we removed a note off, we'll just pass on a NO_OP midi event. The other fields don't really matter.
+      //This is to avoid sending an off for a note we jittered TO. 
+      newEvent.type = MIDI_NOOP;
+      return newEvent;
+    }
+
+
+    //then we start constructing our new event (which may be identical to event if we end up not jittering)
+    newEvent.type = event.type;
+
+    //get the current note
+    byte current_note = event.note;
+
+    //only jitter NoteOn events
+    if(event.type==midi::NoteOn){
+    // roll a die
+    if (randomProbResult(NOTE_NUMBER_JITTER_PROB)) {
+        byte jitter = pickRandomElement(currentOffsetSet->offsets, currentOffsetSet->size);
+        int8_t plus_or_minus = randomProbResult(50) ? 1 : -1;  // ternary operator
+        int8_t octave = randomOctave();
+        byte jittered_note = (int)current_note + (jitter + plus_or_minus*12*octave);
+        //get into the right range
+        
+        // wrap down if >127
+        while (jittered_note > 127) jittered_note -= 12;
+
+        // wrap up if <0
+        while (jittered_note < 0) jittered_note += 12;
+        
+        addJitteredNote(current_note, jittered_note, event.channel); // track old -> new
+        current_note = jittered_note;
+        
+    }
+    }
+
+    newEvent.note = current_note;
+    return newEvent;
+}
+//end jitter functions
+
+//retrigger functions
+void cueRetriggeredNote(MidiEvent me){
+  //if it's not a note-on, we're done
+  // Serial.println("retriggered note cued");
+  if(me.type!=midi::NoteOn){return;}
+  MidiEvent rEvent;
+  rEvent.type = me.type;
+  rEvent.channel = me.channel;
+  rEvent.note = me.note;
+// #ifdef DEBUG
+//             if (note > 127) {
+//               Serial.print("READ OUT OF BOUNDS NOTE:");
+//               Serial.print(note);
+//               Serial.print(" Loop State:");
+//               Serial.print(isLooping);
+//               Serial.print(" Channel: ");
+//               Serial.println(channel);
+//             }
+// #endif
+          rEvent.velocity = me.velocity;
+          rEvent.playTime = millis()+RETRIGGER_TIME;
+          // rEvent.played = false; //not used
+          // rEvent.pulseNumber = currentPulse; //not used
+          retriggerBuffer.push(rEvent);
+          
+          MidiEvent endEvent = createOffNote(rEvent, rEvent.playTime+RETRIGGER_NOTE_LENGTH);
+          retriggerBuffer.push(endEvent);
+    //start maybe adding more retriggered notes, up to 10.  If we hit a "no" at any point, we stop the process
+    for(int i=0;i<10;i++){
+      if(!randomProbResult(RERETRIGGER_PROB)){return;} //stop if we fail a roll
+      //assuming we passed, we just create a new retrigger event, being sure to increse the time 
+      long newEndTime =  rEvent.playTime  + (1+i)*RETRIGGER_TIME;
+      MidiEvent otherEvent;
+      otherEvent.type = rEvent.type;
+      otherEvent.channel = rEvent.channel;
+      otherEvent.note = me.note;
+      otherEvent.velocity = me.velocity;
+      otherEvent.playTime = newEndTime;
+      retriggerBuffer.push(otherEvent);
+      MidiEvent otherEndEvent = createOffNote(otherEvent, newEndTime+RETRIGGER_NOTE_LENGTH);
+      retriggerBuffer.push(otherEndEvent);
+
+    }
+    if (retriggerBuffer.size() == RETRIGGER_BUFFER_SIZE) {
+      Serial.println("**********************************");
+      Serial.println("Retrigger buffer full!");
+      Serial.println("**********************************");
+    }
+
+}
+
+void playRetriggeredNotes(){
+  retriggerBuffer.removeIf([](MidiEvent& event){
+    if (event.playTime <= millis()) {
+        forwardNote(event);
+        return true;
+    }
+    return false;
+});
+
+}
+//end retrigger functions
+
+
+
+//////Display functions
+
+void setupDisplay() {
+  if (!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) {
+    Serial.println("Setup display failed!");
+    for (;;); // halt if OLED init fails
+  }
+  display.clearDisplay();
+  display.setTextSize(1);
+  display.setTextColor(SSD1306_WHITE);
+}
+
+void recoverDisplay() {
+    // display.clearDisplay();
+    // display.display();       // push a blank screen
+    // display.begin(SSD1306_SWITCHCAPVCC, 0x3C);  // full init
+    // redrawDisplay();         // draw your current state
+    display.begin(SSD1306_SWITCHCAPVCC, 0x3C);  // full init first
+    display.clearDisplay();                     // then clear
+}
+
+
+
+
+void drawSDMatrix(bool drumArr[16], bool synthArr[16]) {
+  display.clearDisplay();
+  display.setTextColor(SSD1306_WHITE);
+  display.setTextSize(1);
+  display.setCursor(0, 0); 
+
+  int cols = 4;
+  int rows = 4;
+  int cellW = SCREEN_WIDTH / cols;   // 32 px
+  int cellH = SCREEN_HEIGHT / rows;  // 16 px
+
+  // draw vertical grid lines
+  for (int c = 1; c < cols; c++) {
+    int x = c * cellW;
+    display.drawLine(x, 0, x, SCREEN_HEIGHT, SSD1306_WHITE);
+  }
+
+  // draw horizontal grid lines
+  for (int r = 1; r < rows; r++) {
+    int y = r * cellH;
+    display.drawLine(0, y, SCREEN_WIDTH, y, SSD1306_WHITE);
+  }
+
+  // draw contents
+  for (int i = 0; i < 16; i++) {
+    int row = i / cols;
+    int col = i % cols;
+    // Serial.print(row);
+    // Serial.print(", ");
+    // Serial.print(col);
+    // Serial.print(" -- ");
+    // Serial.print(i);
+    // Serial.print(" -- ");
+    // Serial.println(synthMIDIenabled[i]);
+
+    char buf[3] = ""; // "DS" + null
+    if (drumArr[i] && synthArr[i]) {
+      strcpy(buf, "DS");
+    } else if (drumArr[i]) {
+      strcpy(buf, "D");
+    } else if (synthArr[i]) {
+      strcpy(buf, "S");
+    } else {
+      strcpy(buf, "-"); 
+    }
+
+    int charW = 6;  // default font width
+    int charH = 8;  // default font height
+    int textW = strlen(buf) * charW;
+    int textH = charH;
+
+    int cellX = col * cellW;
+    int cellY = row * cellH;
+
+    int x = cellX + (cellW - textW) / 2;
+    int y = cellY + (cellH - textH) / 2;
+
+    display.setCursor(x, y);
+    display.print(buf);
+  }
+
+  display.display();
+  // safeDisplayUpdate();
+}
+
+void updateSynthSwitches(){
+newSynthState = 0;
+for (int i = 0; i < 16; i++) {
+    bool channelState = (digitalRead(midiPins[i]) == LOW);
+    synthMIDIenabled[i] = channelState;
+    if (channelState) {
+        newSynthState |= (1 << i);
+    } else {
+        newSynthState &= ~(1 << i);  // clear bit if switch is off
+    }
+}
+// if (newSynthState != oldSynthState) {
+    oldSynthState = newSynthState;
+    drawSDMatrix(drumMIDIenabled, synthMIDIenabled);  // you can update arrays too if needed
+// }
+}
+
+void updateDrumSwitches(){
+newDrumState = 0;
+for (int i = 0; i < 16; i++) {
+    bool channelState = (digitalRead(midiPins[i]) == LOW);
+    drumMIDIenabled[i] = channelState;
+    if (channelState) {
+        newDrumState |= (1 << i);
+    } else {
+        newDrumState &= ~(1 << i);  // clear bit if switch is off
+    }
+}
+// if (newDrumState != oldDrumState) {
+    oldDrumState = newDrumState;
+    drawSDMatrix(drumMIDIenabled, synthMIDIenabled);  // you can update arrays too if needed
+// }
+}
+
+
+void drawStretchDisplay(){
+  seg7display.showNumberDecEx(100*stretchValue,0b00000000,true,4, 0);
+}
+
+//////////////// controls interaction (from external arduino) //////////////
+
+// void controlsReceiveEvent(int bytes) {
+//   while (Wire.available()) {
+//     char c = Wire.read();
+//     Serial.print(c);
+//   }
+// }
+
+// void controlsRequestEvent() {
+//   Wire.write("OK");  // respond to master if requested
+// }ctave_shift
+
+
+/////////comms////////////////
+// void processMessage(const ParsedMessage &msg) {
+//     switch (msg.type) {
+//         case MessageType::LOG_MSG:
+//             Serial.print("[NANO]: ");
+//             Serial.write(msg.payload, msg.length);
+//             Serial.println();
+//             break;
+
+//         case MessageType::OCTAVE_SHIFT:
+//             // msg.payload[0] contains the offset
+//             octaveShiftOption = msg.payload[0]; // example
+//             Serial.print("Got a octaveShiftOption#: ");
+//             Serial.println(octaveShiftOption);
+//             break;
+
+//         default:
+//             Serial.print("Unknown message type: ");
+//             Serial.println(static_cast<byte>(msg.type), HEX);
+//             break;
+//     }
+// }
