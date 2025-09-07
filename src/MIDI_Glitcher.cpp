@@ -148,14 +148,14 @@ struct SwitchHelper{
     return switchState;
   }
 
-  //constructor
-  SwitchHelper(int pin)
+  void setup(int pin)
   {
     pinNumber = pin;
     pinMode(pinNumber, INPUT_PULLUP);
-    switchState = digitalRead(pinNumber) == LOW;
+    switchState = digitalRead(pinNumber) == HIGH;
     lastSwitchState = switchState;
   }
+  
 
 };
 //buttons using helper
@@ -475,6 +475,11 @@ bool activeNotes[MAX_NOTES] = { false };
 // --- Menu States ---
 bool retriggerOn = false; //todo: add to menu
 bool synthJitterOn = false; //todo: add to menu
+const int retriggerSwitchPin = 25;
+const int synthJitterSwitchPin = 26;
+SwitchHelper retriggerSwitch;
+SwitchHelper synthJitterSwitch;
+
 byte octaveShiftOption = 0;
 /*
 Octave shift options: 
@@ -664,6 +669,9 @@ void setup() {
   pinMode(synthMIDIButtonPin, INPUT_PULLUP);
   logButton.setup(logButtonPin);
 
+  retriggerSwitch.setup(retriggerSwitchPin);
+  synthJitterSwitch.setup(synthJitterSwitchPin);
+
   digitalWrite(bufferLedPin, HIGH);
   delay(100);
 
@@ -707,6 +715,17 @@ void loop() {
     // }
  
   //////Button & switch reads
+  if(retriggerSwitch.update()){
+    Serial.println(F("Retrigger switch changed!"));
+  };
+  retriggerOn = retriggerSwitch.isOn();
+  if(synthJitterSwitch.update()){
+    Serial.println(F("Synth jitter switch changed!"));
+  };
+  synthJitterOn = synthJitterSwitch.isOn();
+
+
+
 
   stutterButtonPressed = readStutterButton();
   //probably remove soon 
@@ -928,8 +947,6 @@ else{
           //maybe jitter the note
           //we adjust for both note on and note off in case later glitches care about note off (though that is unlikely).
           if(synthJitterOn && synthMIDIenabled[channel-1]){
-          Serial.print(F("jittering note on channel "));
-          Serial.println(channel);
           newEvent = maybeNoteNumberJitter(newEvent);  
           //note the jittered note does get sent to the buffer -- change from before, which jittered within the buffer. (so now if we jitter 46->48, we stutter the 48 each time)
           }
@@ -996,8 +1013,8 @@ if(validLoopFlag){
 
     //we also set our Loop Start Time, we'll use this to determine when we've played through everything.
     loopStartTime = millis();
-    Serial.print(F("set loop start time to: "));
-    Serial.println(loopStartTime);
+    // Serial.print(F("set loop start time to: "));
+    // Serial.println(loopStartTime);
 
 
     //get the length of the playback for only the last 'pulseResolution' pulses
@@ -1117,12 +1134,12 @@ void playSavedPulses() {
       }
 #endif
 
-      Serial.print(F("playing buffer event-- Note:"));
-      Serial.print(event.note);
-      Serial.print(F(" , Ch:"));
-      Serial.print(event.channel);
-      Serial.print(F(" ,v:"));
-      Serial.println(event.velocity);
+      // Serial.print(F("playing buffer event-- Note:"));
+      // Serial.print(event.note);
+      // Serial.print(F(" , Ch:"));
+      // Serial.print(event.channel);
+      // Serial.print(F(" ,v:"));
+      // Serial.println(event.velocity);
 
       forwardNote(event);
     }
@@ -1243,6 +1260,7 @@ void handleClock() {
   pulseStartTimes.push(pulseTime);
   tempoTracker.addPulse(pulseTime);
   tempoTracker.calculateBPM();
+  MIDI.sendRealTime(midi::Clock);
 }
 
 
@@ -1389,7 +1407,6 @@ void getJitterNewNotes(byte oldNote, byte channel, byte outNotes[], int &outCoun
     }
 }
 MidiEvent maybeNoteNumberJitter(MidiEvent event) {
-
     // produce a NEW MIDI note
     MidiEvent newEvent;
     //if it's not a note event we don't want it.  
@@ -1421,6 +1438,8 @@ MidiEvent maybeNoteNumberJitter(MidiEvent event) {
     if(event.type==midi::NoteOn){
     // roll a die
     if (randomProbResult(NOTE_NUMBER_JITTER_PROB)) {
+        Serial.print(F("jittering note on channel "));
+        Serial.println(event.channel);
         byte jitter = pickRandomElement(currentOffsetSet->offsets, currentOffsetSet->size);
         int8_t plus_or_minus = randomProbResult(50) ? 1 : -1;  // ternary operator
         int8_t octave = randomOctave();
