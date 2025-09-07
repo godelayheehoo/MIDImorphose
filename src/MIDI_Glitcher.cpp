@@ -94,7 +94,7 @@ struct ButtonHelper{
   bool update()//returns edge
   {
   lastButtonState = buttonState;
-  buttonState = digitalRead(pinNumber) == LOW;
+  buttonState = digitalRead(pinNumber) == HIGH;
   // Return true only if button was just pressed
   justPressed = (buttonState && !lastButtonState);
   return justPressed;
@@ -106,11 +106,20 @@ struct ButtonHelper{
   }
 
   //constructor
-  ButtonHelper(int pin)
+  // ButtonHelper(int pin)
+  // {
+  //   pinNumber = pin;
+  //   pinMode(pinNumber, INPUT_PULLUP);
+  //   buttonState = digitalRead(pinNumber) == LOW;
+  //   lastButtonState = buttonState;
+  // }
+
+  //setup helper with given pin
+  void setup(int pin)
   {
     pinNumber = pin;
     pinMode(pinNumber, INPUT_PULLUP);
-    buttonState = digitalRead(pinNumber) == LOW;
+    buttonState = digitalRead(pinNumber) == HIGH;
     lastButtonState = buttonState;
   }
 
@@ -213,13 +222,15 @@ const bool PITCHBEND_ACTIVE = true;
 
 //working pulse resolution size, we start with a quarter note (max pulses per stutter)
 unsigned int pulseResolution = MAX_PULSES_PER_STUTTER;
-int oldPulseResolution = pulseResolution;
+unsigned int oldPulseResolution = pulseResolution;
 // --- LED Pins ---
 const int bufferLedPin  = 7; 
 
 // --- Button pins ---
 const int stutterButtonPin = 2;
 const int panicButtonPin = 3;
+ButtonHelper panicButton;
+
 const int drumMIDIButtonPin =  8;// the red button
 const int synthMIDIButtonPin = 9; // the green button
 
@@ -273,8 +284,16 @@ struct PitchBender {
         return bend;
     }
 
-    PitchBender() : channel(0), currentBend(0), bendStepInterval(20), bendStepSize(5),
-                    minBend(0), maxBend(0), numBendPasses(0), directionForward(true) {}
+    PitchBender() 
+  : channel(0),
+    currentBend(0),
+    minBend(0),
+    maxBend(0),
+    numBendPasses(0),
+    directionForward(true),
+    lastUpdate(0),
+    bendStepInterval(20),
+    bendStepSize(5) {}
 
     PitchBender(byte ch) : channel(ch) {
         int a = pickRandomBend();
@@ -356,8 +375,8 @@ bool isBlinking = false;
 // --- Button states ---
 bool stutterButtonPressed = false;
 bool prevStutterPressed = false;
-bool panicButtonPressed = false;
-bool prevPanicPressed = false;
+// bool panicButtonPressed = false;
+// bool prevPanicPressed = false;
 bool drumMIDIButtonPressed = false;
 bool prevDrumMIDIButtonPressed = false;
 bool synthMIDIButtonPressed = false;
@@ -629,7 +648,9 @@ void setup() {
   drawSDMatrix(drumMIDIenabled, synthMIDIenabled);
   Serial.println("Setting pins");
   pinMode(stutterButtonPin, INPUT); 
-  pinMode(panicButtonPin, INPUT_PULLUP);
+  // pinMode(panicButtonPin, INPUT_PULLUP);
+  panicButton.setup(panicButtonPin);
+
   pinMode(onesTempoPin, INPUT_PULLUP);
   pinMode(twosTempoPin, INPUT_PULLUP);
   pinMode(foursTempoPin, INPUT_PULLUP);
@@ -692,7 +713,8 @@ void loop() {
   logButtonState = digitalRead(LOG_BUTTON)==HIGH;
 
   stutterButtonPressed = readStutterButton();
-  panicButtonPressed = digitalRead(panicButtonPin) == HIGH;
+  //probably remove soon 
+  // panicButtonPressed = digitalRead(panicButtonPin) == HIGH;
 
 //trying making these low
   drumMIDIButtonPressed = digitalRead(drumMIDIButtonPin)==HIGH;
@@ -719,7 +741,14 @@ void loop() {
     // Serial.println(stretchValue);
     oldStretchValue = stretchValue;
     lastTimeStretchPotUpdated = millis();
-    drawStretchDisplay();
+
+     // Start temporary view
+    tempViewCallback = drawStretchDisplay;
+    tempViewStartTime = millis();
+    tempViewActive = true;
+
+    tempViewCallback();
+
    }
   }
 
@@ -741,7 +770,7 @@ switch(tempoDipswitchVal) {
 updateOffsetSwitches();
 
   ///////Panic button logic
-if (panicButtonPressed && !prevPanicPressed) {
+if (panicButton.update()) {
     midiPanic();
 #ifdef DEBUG
     Serial.println("Panic!");
@@ -775,14 +804,14 @@ if (panicButtonPressed && !prevPanicPressed) {
   ///check if pulse resolution has changed and respond appropriately. If the new resolution is bigger, we have no problem. If it's smaller, we clear out the bad notes & start times.
   if (pulseResolution < oldPulseResolution) {
     //clear out extra notes
-    for (int i = 1; i < pulseResolution + 1; i++) {
+    for (unsigned int i = 1; i < pulseResolution + 1; i++) {
       int removalIndex = (currentPulse + i) % oldPulseResolution;
       clearOldNotes(removalIndex);
     }
     // //clear out extra start times
     // Serial.print("On pulse#");
     // Serial.println(currentPulse);
-    for (int i = 0; i < oldPulseResolution - pulseResolution; i++) {
+    for (unsigned int i = 0; i < oldPulseResolution - pulseResolution; i++) {
     //   Serial.print("Removing the");
     //   Serial.print(i);
     //   Serial.print("nth pulse, now have");
@@ -1028,8 +1057,7 @@ if(logButtonState&&!prevLogButtonState){
 // }
 }
 
-  //update previous states -- loop end
-  prevPanicPressed = panicButtonPressed;
+
   prevStutterPressed = stutterButtonPressed;
   prevLooping = isLooping;
   prevDrumMIDIButtonPressed = drumMIDIButtonPressed;
