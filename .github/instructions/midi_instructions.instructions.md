@@ -39,7 +39,7 @@ Pin Assignments: Changeable in source; ensure consistency with hardware.
 Code Comments: Extensive TODOs and architecture notes in MIDI_Glitcher.cpp header.
 If any section is unclear or missing important project-specific details, please provide feedback or specify which workflows or patterns need more documentation. 
 
-You will notice there is an rx_message_handling file, that is deprecated.  
+You will notice there is an rx_message_handling file, that is deprecated.  It is not used in the project.  Please do not suggest any changes to it.  It is left in the project for reference only.
 
 
 *** End Patch

@@ -495,9 +495,9 @@ void forwardNote(MidiEvent event) {
 //going to get screwy with CC and other non-notes probably's probably
   #ifdef ACTIVE_NOTES_DEBUG
       if (!activeNotes[event.note]) {
-        Serial.print("Saw note#");
+        Serial.print(F("Saw note#"));
         Serial.print(event.note);
-        Serial.print(" channel#");
+        Serial.print(F(" channel#"));
         Serial.println(event.channel);
         activeNotes[event.note] = true;
       }
@@ -519,7 +519,7 @@ void midiPanic() {
 bool checkIfMIDIOn(byte channel_num){
   if(channel_num==0){return true;}
   if(channel_num>16){
-    Serial.println("Got invalid channel!"); 
+    Serial.println(F("Got invalid channel!")); 
     return false;}
   return drumMIDIenabled[channel_num-1]||synthMIDIenabled[channel_num-1];
 }
@@ -552,7 +552,7 @@ byte getRandomActiveChannel(const bool arr[16]) {
     }
 
     if (selected == -1) {
-        Serial.println("Invalid channel returned!");
+        Serial.println(F("Invalid channel returned!"));
         return 255; // no active channel
     }
 
@@ -638,17 +638,17 @@ MidiEvent maybeNoteNumberJitter(MidiEvent event);
 void setup() {
   // put your setup code here, to run once:
   Serial.begin(115200);
-  Serial.println("Setting up serial2");
+  Serial.println(F("Setting up serial2"));
   Serial2.begin(115200); 
 
-  Serial.println("Starting setup");
+  Serial.println(F("Starting setup"));
 
-  Serial.println("Entering setup display");
+  Serial.println(F("Entering setup display"));
   //display setup
   setupDisplay();
-  Serial.println("Drawing SD Matrix");
+  Serial.println(F("Drawing SD Matrix"));
   drawSDMatrix(drumMIDIenabled, synthMIDIenabled);
-  Serial.println("Setting pins");
+  Serial.println(F("Setting pins"));
   pinMode(stutterButtonPin, INPUT); 
   // pinMode(panicButtonPin, INPUT_PULLUP);
   panicButton.setup(panicButtonPin);
@@ -667,18 +667,16 @@ void setup() {
   digitalWrite(bufferLedPin, HIGH);
   delay(100);
 
-  Serial.println("Turning on MIDI");
+  Serial.println(F("Turning on MIDI"));
   MIDI.begin(MIDI_CHANNEL_OMNI);
   MIDI.turnThruOff();
-
-
 
   //setup midi channels -- edit later for S&D arrays.
   for (int i = 0; i < 16; i++) {
     pinMode(midiPins[i], INPUT_PULLUP);
   }
 
-Serial.println("Drawing SD matrix again (why?)");
+Serial.println(F("Drawing SD matrix again (why?)"));
 //setup OLED
   drawSDMatrix(drumMIDIenabled, synthMIDIenabled); 
 //setup 7seg-- 0x0f is 15.
@@ -697,7 +695,7 @@ Serial.println("Drawing SD matrix again (why?)");
   // Wire.onReceive(conrolsReceiveEvent); 
   // Wire.onRequest(controlsRequestEvent); 
 
-  Serial.println("Ending setup");
+  Serial.println(F("Ending setup"));
   
   
 }
@@ -719,11 +717,11 @@ void loop() {
   synthMIDIButtonPressed = digitalRead(synthMIDIButtonPin)==HIGH;
 
   if(drumMIDIButtonPressed&&!prevDrumMIDIButtonPressed){
-    Serial.println("Drum button pressed!");
+    Serial.println(F("Drum button pressed!"));
     updateDrumSwitches();
   }
   if(synthMIDIButtonPressed && !prevSynthMIDIButtonPressed){
-    Serial.println("Synth button pressed!");
+    Serial.println(F("Synth button pressed!"));
     updateSynthSwitches();
   }
 
@@ -771,7 +769,7 @@ updateOffsetSwitches();
 if (panicButton.update()) {
     midiPanic();
 #ifdef DEBUG
-    Serial.println("Panic!");
+    Serial.println(F("Panic!"));
 #endif
 
     // Start temporary view
@@ -914,11 +912,11 @@ else{
           newEvent.note = note;
 #ifdef DEBUG
             if (note > 127) {
-              Serial.print("READ OUT OF BOUNDS NOTE:");
+              Serial.print(F("READ OUT OF BOUNDS NOTE:"));
               Serial.print(note);
-              Serial.print(" Loop State:");
+              Serial.print(F(" Loop State:"));
               Serial.print(isLooping);
-              Serial.print(" Channel: ");
+              Serial.print(F(" Channel: "));
               Serial.println(channel);
             }
 #endif
@@ -930,7 +928,7 @@ else{
           //maybe jitter the note
           //we adjust for both note on and note off in case later glitches care about note off (though that is unlikely).
           if(synthJitterOn && synthMIDIenabled[channel-1]){
-          Serial.print("jittering note on channel ");
+          Serial.print(F("jittering note on channel "));
           Serial.println(channel);
           newEvent = maybeNoteNumberJitter(newEvent);  
           //note the jittered note does get sent to the buffer -- change from before, which jittered within the buffer. (so now if we jitter 46->48, we stutter the 48 each time)
@@ -942,7 +940,7 @@ else{
           if(type == midi::NoteOn || (type == midi::NoteOff && checkForNoteOn(newEvent.note))){
               //check if buffer is full now
                if ((eventsBuffer.size()==MAX_EVENTS) && !isBlinking) {
-                Serial.println("Buffer full!");
+                Serial.println(F("Buffer full!"));
               startBufferFullBlink();
                 }
               //push the new event.
@@ -986,7 +984,7 @@ else{
   //I don't think I need this flag logic, I think I *can* just return out of here.  
   bool validLoopFlag = true;
   if (pulseStartTimes.size() < pulseResolution) {
-    Serial.println("Insufficient number of pulses!"); 
+    Serial.println(F("Insufficient number of pulses!")); 
     validLoopFlag=false;
     isLooping=false;
   }
@@ -998,7 +996,7 @@ if(validLoopFlag){
 
     //we also set our Loop Start Time, we'll use this to determine when we've played through everything.
     loopStartTime = millis();
-    Serial.print("set loop start time to: ");
+    Serial.print(F("set loop start time to: "));
     Serial.println(loopStartTime);
 
 
@@ -1044,7 +1042,7 @@ if(validLoopFlag){
 
 //debug
 if(logButton.update()){
-  Serial.print("Current bpm: ");
+  Serial.print(F("Current bpm: "));
   Serial.println(tempoTracker.bpm);
 }
 
@@ -1111,19 +1109,19 @@ void playSavedPulses() {
 
 #ifdef ACTIVE_NOTES_DEBUG
       if (!activeNotes[event.note]) {
-        Serial.print("Saw note#");
+        Serial.print(F("Saw note#"));
         Serial.print(event.note);
-        Serial.print(" channel#");
+        Serial.print(F(" channel#"));
         Serial.println(event.channel);
         activeNotes[event.note] = true;
       }
 #endif
 
-      Serial.print("playing buffer event-- Note:");
+      Serial.print(F("playing buffer event-- Note:"));
       Serial.print(event.note);
-      Serial.print(" , Ch:");
+      Serial.print(F(" , Ch:"));
       Serial.print(event.channel);
-      Serial.print(" ,v:");
+      Serial.print(F(" ,v:"));
       Serial.println(event.velocity);
 
       forwardNote(event);
@@ -1305,7 +1303,7 @@ void updateBufferFullBlink() {
 }
 // Call this to start a new pulse sequence
 void startBufferFullBlink() {
-  Serial.println("starting buffer full blink");
+  Serial.println(F("starting buffer full blink"));
   isBlinking = true;
   blinkStep = 0;
   blinkStartTime = millis();
@@ -1322,7 +1320,7 @@ void pushBend(int channel){
     }
   }
   //otherwise, create a new pushbend object and stick it on
-  Serial.print(">>>>>>>>> creating bend on channel ");
+  Serial.print(F(">>>>>>>>> creating bend on channel "));
   Serial.println(channel);
   PitchBender bend = PitchBender(channel);
   //if we're pushing off an old pitchbend, make sure we turn it off
@@ -1490,9 +1488,9 @@ void cueRetriggeredNote(MidiEvent me){
 
     }
     if (retriggerBuffer.size() == RETRIGGER_BUFFER_SIZE) {
-      Serial.println("**********************************");
-      Serial.println("Retrigger buffer full!");
-      Serial.println("**********************************");
+      Serial.println(F("**********************************"));
+      Serial.println(F("Retrigger buffer full!"));
+      Serial.println(F("**********************************"));
     }
 
 }
@@ -1515,7 +1513,7 @@ void playRetriggeredNotes(){
 
 void setupDisplay() {
   if (!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) {
-    Serial.println("Setup display failed!");
+    Serial.println(F("Setup display failed!"));
     for (;;); // halt if OLED init fails
   }
   display.clearDisplay();

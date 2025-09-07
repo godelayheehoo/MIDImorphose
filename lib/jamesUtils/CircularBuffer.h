@@ -1,3 +1,5 @@
+#pragma once
+
 template <typename T, size_t Capacity>
 class CircularBuffer {
 public:
