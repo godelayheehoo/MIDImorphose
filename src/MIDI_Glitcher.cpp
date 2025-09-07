@@ -35,10 +35,8 @@ channel to off and updating.  There's nuance here though-- the stuttered notes w
 // calulate the average of the last set of empty note-durations (end events) and average them to find pulseDuration, which is then used to mark the playback Loop duration.
 //todo: try changing time to uint16_t (you'll need to use relative time), try changing time to be synced to clock pulses (byte/uint8_t).
 //add LED that blinks when we try to add a note to a full events buffer (or just is on when the events buffer is full?)
-//todo: timestretch
-//todo: pitch shift?  But consider how that'd interact with drumss
 //change more ints to bytes?
-//todo: config mode?  Maybe not necessary with current setup
+//todo: config mode?  Maybe not necessary with current setup -- actually, not doable until I get the teensy.
 //todo: consider updating display to reflect changes to pulseResolution?
 //todo: I don't like that panic displays panic and then to get back to a normal display I have to re-set drum or synth assignments via the buttons+dipswitches.  Though maybe that's okay.
 //todo: create a "hold display" button that lets me have some message show for 2 seconds or whatever then go back to whatever I want my default to be
@@ -46,6 +44,8 @@ channel to off and updating.  There's nuance here though-- the stuttered notes w
 //todo: Figure out how I want to handle drum note numbers (for equivalent to jitter).  Could assign them per channel and "know" some like the dbi's, could also "learn" them per-channel (could get memory heavy)
 //todo: update code to use the createOffNote() function where appropraite
 //todo: Retrigger OPTIONALLY affecting synths, only affecting drums
+//todo: update buttons to use ButtonHelper  
+//todo: temporarily make the menu options set by physical switches. 
 #include <Arduino.h>
 #include <CircularBuffer.h>
 //midi stuff
@@ -66,6 +66,13 @@ Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 #define DIO 10
 TM1637Display seg7display(CLK, DIO); 
 
+// Temporary view system
+unsigned long tempViewStartTime = 0;
+bool tempViewActive = false;
+void (*tempViewCallback)() = nullptr;
+
+const unsigned long TEMP_DISPLAY_TIME = 2000;  // milliseconds
+
 //controls interaction stuf
 //debug stuff
 #define DEBUG
@@ -82,16 +89,63 @@ struct ButtonHelper{
   int pinNumber;
   bool buttonState = false;
   bool lastButtonState = false;
+  bool justPressed = false;
 
   bool update()//returns edge
   {
   lastButtonState = buttonState;
   buttonState = digitalRead(pinNumber) == LOW;
   // Return true only if button was just pressed
-  return (buttonState && !lastButtonState);
+  justPressed = (buttonState && !lastButtonState);
+  return justPressed;
   }
+
+  bool isPressed()
+  {
+    return buttonState;
+  }
+
+  //constructor
+  ButtonHelper(int pin)
+  {
+    pinNumber = pin;
+    pinMode(pinNumber, INPUT_PULLUP);
+    buttonState = digitalRead(pinNumber) == LOW;
+    lastButtonState = buttonState;
+  }
+
 };
 
+struct SwitchHelper{
+  int pinNumber;
+  bool switchState = false;
+  bool lastSwitchState = false;
+  bool justChanged = false;
+
+  bool update()//returns edge
+  {
+  lastSwitchState = switchState;
+  switchState = digitalRead(pinNumber) == LOW;
+  // Return true only if switch was just changed
+  justChanged = (switchState != lastSwitchState);
+  return justChanged;
+  }
+
+  bool isOn()
+  {
+    return switchState;
+  }
+
+  //constructor
+  SwitchHelper(int pin)
+  {
+    pinNumber = pin;
+    pinMode(pinNumber, INPUT_PULLUP);
+    switchState = digitalRead(pinNumber) == LOW;
+    lastSwitchState = switchState;
+  }
+
+};
 //buttons using helper
 // ButtonHelper playButton;
 // const int playPin = 13;
@@ -158,7 +212,7 @@ const byte NUM_ACTIVE_PITCHBENDS = 4;
 const bool PITCHBEND_ACTIVE = true;
 
 //working pulse resolution size, we start with a quarter note (max pulses per stutter)
-int pulseResolution = MAX_PULSES_PER_STUTTER;
+unsigned int pulseResolution = MAX_PULSES_PER_STUTTER;
 int oldPulseResolution = pulseResolution;
 // --- LED Pins ---
 const int bufferLedPin  = 7; 
@@ -552,6 +606,8 @@ void updateBends();
 bool checkForNoteOn(byte noteOffNumber);
 void startBufferFullBlink();
 void pruneBends();
+void showPanicDisplay();
+
 
 MidiEvent maybeNoteNumberJitter(MidiEvent event);
 
@@ -572,7 +628,7 @@ void setup() {
   Serial.println("Drawing SD Matrix");
   drawSDMatrix(drumMIDIenabled, synthMIDIenabled);
   Serial.println("Setting pins");
-  pinMode(stutterButtonPin, INPUT);
+  pinMode(stutterButtonPin, INPUT); 
   pinMode(panicButtonPin, INPUT_PULLUP);
   pinMode(onesTempoPin, INPUT_PULLUP);
   pinMode(twosTempoPin, INPUT_PULLUP);
@@ -685,31 +741,20 @@ switch(tempoDipswitchVal) {
 updateOffsetSwitches();
 
   ///////Panic button logic
-  if (panicButtonPressed && !prevPanicPressed) {
+if (panicButtonPressed && !prevPanicPressed) {
     midiPanic();
 #ifdef DEBUG
     Serial.println("Panic!");
 #endif
-  recoverDisplay();
 
-  // --- Draw "PANIC!" centered on top ---
-    const char* panicMsg = "PANIC!";
-    display.setTextSize(2);              // adjust size to fit
-    display.setTextColor(SSD1306_WHITE);
+    // Start temporary view
+    tempViewCallback = showPanicDisplay;
+    tempViewStartTime = millis();
+    tempViewActive = true;
 
-    int16_t x1, y1;
-    uint16_t w, h;
-    display.getTextBounds(panicMsg, 0, 0, &x1, &y1, &w, &h);
+    tempViewCallback();  // draw it immediately
+}
 
-    int x = (display.width() - w) / 2;
-    int y = (display.height() - h) / 2;
-
-    display.setCursor(x, y);
-    display.println(panicMsg);
-
-    // Push buffer to the screen
-    display.display();
-  }
 
   // if(playButton.update()){
   //   //first press may not work, MIDIPlayState may be misleading
@@ -955,7 +1000,7 @@ if(validLoopFlag){
     if (millis() - loopStartTime > playbackLength) {
 
       loopStartTime = millis();
-      for (int i = 0; i < eventsBuffer.size(); i++) {
+      for (unsigned int i = 0; i < eventsBuffer.size(); i++) {
         // Iterate through all events in this pulse.  Note this resets ALL, not just the ones that are active due to pulseResolution
         eventsBuffer[i].played = false;
       }
@@ -997,6 +1042,12 @@ if(logButtonState&&!prevLogButtonState){
   if(PITCHBEND_ACTIVE){
   pruneBends();
   }
+  
+  //update temporary view
+  if (tempViewActive && millis() - tempViewStartTime > TEMP_DISPLAY_TIME) {
+    tempViewActive = false;
+    drawSDMatrix(drumMIDIenabled, synthMIDIenabled);  // restore SD matrix view
+}
 }
 
 //////////////////////////////////////////////////////////////////////////////////////
@@ -1012,7 +1063,7 @@ void playSavedPulses() {
     // Serial.println(eventsBuffer.size());
 
   // Iterate through all saved pulses
-  for (int i = 0; i < eventsBuffer.size(); i++) {
+  for (unsigned int i = 0; i < eventsBuffer.size(); i++) {
     // Iterate through all events
 
     MidiEvent& event = eventsBuffer[i];  // Use reference to original
@@ -1246,7 +1297,7 @@ void startBufferFullBlink() {
 //pitchbend functions
 void pushBend(int channel){
   //if we're already bending on this channel, we exit
-  for(int i = 0; i<pitchbendBuffer.size(); i++){
+  for(unsigned int i = 0; i<pitchbendBuffer.size(); i++){
     if(channel == pitchbendBuffer[i].channel){
       return;
     }
@@ -1262,7 +1313,7 @@ void pushBend(int channel){
   pitchbendBuffer.push(bend);
 }
 void updateBends(){
-  for(int i = 0; i<pitchbendBuffer.size();i++){
+  for(unsigned int i = 0; i<pitchbendBuffer.size();i++){
     pitchbendBuffer[i].update();
   }
 }
@@ -1567,6 +1618,24 @@ for (int i = 0; i < 16; i++) {
 
 void drawStretchDisplay(){
   seg7display.showNumberDecEx(100*stretchValue,0b00000000,true,4, 0);
+}
+
+void showPanicDisplay() {
+    const char* panicMsg = "PANIC!";
+    display.clearDisplay();
+    display.setTextSize(2);
+    display.setTextColor(SSD1306_WHITE);
+
+    int16_t x1, y1;
+    uint16_t w, h;
+    display.getTextBounds(panicMsg, 0, 0, &x1, &y1, &w, &h);
+
+    int x = (display.width() - w) / 2;
+    int y = (display.height() - h) / 2;
+
+    display.setCursor(x, y);
+    display.println(panicMsg);
+    display.display();
 }
 
 //////////////// controls interaction (from external arduino) //////////////
