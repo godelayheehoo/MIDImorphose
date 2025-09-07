@@ -83,6 +83,9 @@ const unsigned long TEMP_DISPLAY_TIME = 2000;  // milliseconds
 // #include "rx_message_handling.h"
 // ParsedMessage msg;
 
+//tempo tracker stuff
+#include "Tempo_Tracker.h"
+TempoTracker tempoTracker;
 
 //button helper -- not currently used for most buttons
 struct ButtonHelper{
@@ -160,9 +163,8 @@ struct SwitchHelper{
 // const int playPin = 13;
 
 
-const int LOG_BUTTON = 12;
-bool logButtonState = false;
-bool prevLogButtonState = false;
+const int logButtonPin = 12;
+ButtonHelper logButton;
 
 
 //useful macros
@@ -660,9 +662,7 @@ void setup() {
   pinMode(bufferLedPin, OUTPUT);
   pinMode(drumMIDIButtonPin, INPUT_PULLUP);
   pinMode(synthMIDIButtonPin, INPUT_PULLUP);
-  pinMode(LOG_BUTTON,INPUT_PULLUP);
-  // pinMode(playPin, INPUT_PULLUP);
-  // playButton.pinNumber = playPin;
+  logButton.setup(logButtonPin);
 
   digitalWrite(bufferLedPin, HIGH);
   delay(100);
@@ -709,8 +709,6 @@ void loop() {
     // }
  
   //////Button & switch reads
-
-  logButtonState = digitalRead(LOG_BUTTON)==HIGH;
 
   stutterButtonPressed = readStutterButton();
   //probably remove soon 
@@ -1045,16 +1043,9 @@ if(validLoopFlag){
 //end of pure !isLoopingLogic
 
 //debug
-if(logButtonState&&!prevLogButtonState){
-//   for(int i=0; i<48; i++){
-//     Serial.print(i);
-//     Serial.print(" : ");
-//     for(int j = 0; j<debugBuffer[i].size();j++){
-//     Serial.print(debugBuffer[i][j]);
-//     Serial.print(";");
-//   }
-//   Serial.println(" ");
-// }
+if(logButton.update()){
+  Serial.print("Current bpm: ");
+  Serial.println(tempoTracker.bpm);
 }
 
 
@@ -1063,8 +1054,6 @@ if(logButtonState&&!prevLogButtonState){
   prevDrumMIDIButtonPressed = drumMIDIButtonPressed;
   prevSynthMIDIButtonPressed = synthMIDIButtonPressed;
   oldPulseResolution = pulseResolution;
-  prevLogButtonState = logButtonState;
-
   
     
   if(PITCHBEND_ACTIVE){
@@ -1254,6 +1243,8 @@ void handleClock() {
   }
   //add the new pulse start time
   pulseStartTimes.push(pulseTime);
+  tempoTracker.addPulse(pulseTime);
+  tempoTracker.calculateBPM();
 }
 
 
