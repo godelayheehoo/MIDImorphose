@@ -3,14 +3,27 @@
   Stutters (loops) midi on pressing button.  One bank of dipswitches controls active midi channels (treating drum and synth seperately, see below), 
   the other controls timing as follows (base-2 interpretation, power is switch_number-1):
 
-  case 0: pulseResolution = 3;  break;   // 1/32 note
-  case 1: pulseResolution = 6;  break;   // 1/16 note
-  case 2: pulseResolution = 8;  break;   // 1/8 triplet
-  case 3: pulseResolution = 12; break;   // 1/8 note
-  case 4: pulseResolution = 16; break;   // dotted 1/8 note (1/8 + 1/16)
-  case 5: pulseResolution = 18; break;   // 3/16 note
-  case 6: pulseResolution = 24; break;   // 1/4 note
-  case 7: pulseResolution = 48; break;   // 1/2 note
+### Timing Resolution Table
+
+| Dipswitch Value | Pulse Resolution | Note Division         |
+|-----------------|-----------------|---------------------|
+| 0               | 3               | 1/32 note           |
+| 1               | 4               | 1/32 triplet        |
+| 2               | 6               | 1/16 note           |
+| 3               | 8               | 1/16 triplet        |
+| 4               | 9               | dotted 1/16 note    |
+| 5               | 12              | 1/8 note            |
+| 6               | 15              | 5/32 note (odd)     |
+| 7               | 16              | 1/8 triplet         |
+| 8               | 18              | dotted 1/8 note     |
+| 9               | 24              | 1/4 note            |
+| 10              | 32              | 1/4 triplet         |
+| 11              | 36              | dotted 1/4 note     |
+| 12              | 48              | 1/2 note            |
+| 13              | 64              | 1/2 triplet         |
+| 14              | 72              | dotted 1/2 note     |
+| 15              | 96              | whole note          |
+
 
 The buffer that holds midi events is large but not unlimited.  On a MEGA, it holds 8*48=384 midi note on/off events.  You actually get a little more than that due to some optimization.
 The warning LED will blink 4 times if you are writing to a full buffer (which will cause the oldest notes to be dropped).
@@ -52,6 +65,9 @@ channel to off and updating.  There's nuance here though-- the stuttered notes w
 //TODO: Add the ability to change the stutter temperature, probably from a menu. 
 //TODO: should actually maybe -- check if you haven't done this-- make sure that the temp swapping
 //only happens on notes whose time it is to be played, not on every loop.
+//TODO: add full reversal.  WIll require changing reference in playedSavedPulses to use a copy of the event,
+//but make sure we're still updating played correctly.  
+//TODO: percolation needs note off handling added.  This is basically already solved in retrigger.
 #include <Arduino.h>
 #include <CircularBuffer.h>
 //midi stuff
@@ -177,10 +193,10 @@ ButtonHelper logButton;
 #define BETWEEN(x, lo, hi) ((x) >= (lo) && (x) <= (hi))
 
 //constants
-const int MAX_PULSES_PER_STUTTER = 48;  //24 pulses -> 1 quarter note
+const int MAX_PULSES_PER_STUTTER = 96;  //24 pulses -> 1 quarter note
 //ChatGPT says I can get away with 8 max events per pulse. I'll try 16 for now.  Trying to cut down on memory.
 //This could be set as a function of MAX_PULSES_PER_STUTTER
-const int MAX_EVENTS = 8 * MAX_PULSES_PER_STUTTER;
+const int MAX_EVENTS = 4 * MAX_PULSES_PER_STUTTER;
 // const int MAX_EVENTS = 100; //testing
 // const int MAX_EVENTS = 5;
 
@@ -221,7 +237,8 @@ const byte JITTER_BUFFER_SIZE = 64;
 const byte RETRIGGER_PROB = 10; 
 const byte RERETRIGGER_PROB = 50;
 const byte RETRIGGER_BUFFER_SIZE = 32;
-const byte RETRIGGER_TIME = 50; // could do min/max if we wanted to. This is the delay time between ntoes
+// const byte RETRIGGER_TIME = 50; // could do min/max if we wanted to. This is the delay time between ntoes
+const byte RETRIGGER_TIME = 100; //todo: make this different for drums and synths? 50 is fine for drums, too fast for synths.
 const byte RETRIGGER_NOTE_LENGTH = 50; //doesn't matter for drums, might for samples, does for synth
 
 const byte PITCHBEND_PROB_1000000000 = 3; //note: this is x/a billion not x/100 like normal.  Then we do the check three times!
@@ -235,7 +252,7 @@ byte STUTTER_TEMPERATURE = 2; //this is used to randomly rearrange/resample note
 unsigned int pulseResolution = MAX_PULSES_PER_STUTTER;
 unsigned int oldPulseResolution = pulseResolution;
 // --- LED Pins ---
-const int bufferLedPin  = 7; 
+const int bufferLedPin = 13; 
 
 // --- Button pins ---
 const int stutterButtonPin = 2;
@@ -249,6 +266,7 @@ const int synthMIDIButtonPin = 9; // the green button
 const byte onesTempoPin = 4;
 const byte twosTempoPin = 5;
 const byte foursTempoPin = 6;
+const byte eightsTempoPin = 7;
 
 // --- "Scale"/Offset dipswitch pins
 const int onesOffsetPin = 23;
@@ -397,6 +415,7 @@ bool prevSynthMIDIButtonPressed = false;
 bool onesTempoPinUp;
 bool twosTempoPinUp;
 bool foursTempoPinUp;
+bool eightsTempoPinUp;
 byte tempoDipswitchVal;
 
 bool onesOffsetPinUp;
@@ -463,14 +482,14 @@ const uint8_t midiPins[16] = {
 bool drumMIDIenabled[16]  = {
   false, false, false, false,
   false, false, false, false,
-  false, true, true, true,
+  false, true, true, false,
   false, false, false, false
 };
 bool synthMIDIenabled[16]=  {
   true, true, true, true,
   true, true, true, true,
-  true, false, false, false,
-  false, false, false, false
+  true, false, false, true,
+  true, true, false, false
 };
 
 
@@ -519,23 +538,23 @@ void forwardNote(MidiEvent event) {
 
   if(event.type==midi::NoteOn){
     //debug -- send note number, channel, and type
-    Serial.print("[");
-    Serial.print(millis());
-    Serial.print(F("] Forwarding NoteOn: note#"));
-    Serial.print(event.note);
-    Serial.print(F(" channel#"));
-    Serial.println(event.channel);
+    // Serial.print("[");
+    // Serial.print(millis());
+    // Serial.print(F("] Forwarding NoteOn: note#"));
+    // Serial.print(event.note);
+    // Serial.print(F(" channel#"));
+    // Serial.println(event.channel);
     //end debug
     MIDI.sendNoteOn(event.note, event.velocity, event.channel);
   } else if(event.type==midi::NoteOff){
     //debug
         //debug -- send note number, channel, and type
-    Serial.print("[");
-    Serial.print(millis());
-    Serial.print(F("] Forwarding NoteOff: note#"));
-    Serial.print(event.note);
-    Serial.print(F(" channel#"));
-    Serial.println(event.channel);
+    // Serial.print("[");
+    // Serial.print(millis());
+    // Serial.print(F("] Forwarding NoteOff: note#"));
+    // Serial.print(event.note);
+    // Serial.print(F(" channel#"));
+    // Serial.println(event.channel);
     //end debug
     MIDI.sendNoteOff(event.note, 0, event.channel);
   }
@@ -660,8 +679,8 @@ void startBufferFullBlink();
 void pruneBends();
 void showPanicDisplay();
 
-
 MidiEvent maybeNoteNumberJitter(MidiEvent event);
+MidiEvent maybePercolateNote(MidiEvent event, byte index_number);
 
 
 // void processMessage(const ParsedMessage &msg);
@@ -669,8 +688,6 @@ MidiEvent maybeNoteNumberJitter(MidiEvent event);
 void setup() {
   // put your setup code here, to run once:
   Serial.begin(115200);
-  Serial.println(F("Setting up serial2"));
-  Serial2.begin(115200); 
 
   Serial.println(F("Starting setup"));
 
@@ -687,6 +704,7 @@ void setup() {
   pinMode(onesTempoPin, INPUT_PULLUP);
   pinMode(twosTempoPin, INPUT_PULLUP);
   pinMode(foursTempoPin, INPUT_PULLUP);
+  pinMode(eightsTempoPin, INPUT_PULLUP);
   pinMode(onesOffsetPin, INPUT_PULLUP);
   pinMode(twosOffsetPin, INPUT_PULLUP);
   pinMode(foursOffsetPin, INPUT_PULLUP);
@@ -793,16 +811,26 @@ void loop() {
   tempoDipswitchVal = readTempoDipswitch();
 
   //get pulse resoution from tempoDipswitchVal
-switch(tempoDipswitchVal) {
-  case 0: pulseResolution = 3;  break;   // 1/32 note
-  case 1: pulseResolution = 6;  break;   // 1/16 note
-  case 2: pulseResolution = 8;  break;   // 1/8 triplet
-  case 3: pulseResolution = 12; break;   // 1/8 note
-  case 4: pulseResolution = 16; break;   // dotted 1/8 note (1/8 + 1/16)
-  case 5: pulseResolution = 18; break;   // 3/16 note
-  case 6: pulseResolution = 24; break;   // 1/4 note
-  case 7: pulseResolution = 48; break;   // 1/2 note
+// 24 MIDI clocks = 1 quarter note
+switch (tempoDipswitchVal) {
+  case  0: pulseResolution =  3;  break; // 1/32 note
+  case  1: pulseResolution =  4;  break; // 1/32 triplet
+  case  2: pulseResolution =  6;  break; // 1/16 note
+  case  3: pulseResolution =  8;  break; // 1/16 triplet
+  case  4: pulseResolution =  9;  break; // dotted 1/16 note
+  case  5: pulseResolution = 12;  break; // 1/8 note
+  case  6: pulseResolution = 15;  break; // 5/32 note (odd subdivision)
+  case  7: pulseResolution = 16;  break; // 1/8 triplet
+  case  8: pulseResolution = 18;  break; // dotted 1/8 note
+  case  9: pulseResolution = 24;  break; // 1/4 note
+  case 10: pulseResolution = 32;  break; // 1/4 triplet
+  case 11: pulseResolution = 36;  break; // dotted 1/4 note
+  case 12: pulseResolution = 48;  break; // 1/2 note
+  case 13: pulseResolution = 64;  break; // 1/2 triplet
+  case 14: pulseResolution = 72;  break; // dotted 1/2 note
+  case 15: pulseResolution = 96;  break; // whole note
 }
+
 
 updateOffsetSwitches();
 
@@ -942,6 +970,8 @@ else{
       else{
         byte channel = MIDI.getChannel();
         //pass through notes if we're on an untracked channel OR if looping is off
+        // Serial.print("MIDI event on channel ");
+        // Serial.println(channel);
       if(!isLooping||!checkIfMIDIOn(channel)){
         if (type == midi::NoteOn || type == midi::NoteOff) {
           byte note = MIDI.getData1();
@@ -962,8 +992,8 @@ else{
             }
 #endif
             //debug
-            Serial.print("BEFORE PROCESSING: Note:");
-            Serial.println(note);
+            // Serial.print("BEFORE PROCESSING: Note:");
+            // Serial.println(note);
             //end debug
           newEvent.velocity = velocity;
           newEvent.playTime = millis();
@@ -1087,6 +1117,31 @@ if(validLoopFlag){
 if(logButton.update()){
   Serial.print(F("Current bpm: "));
   Serial.println(tempoTracker.bpm);
+  //if we're loopoing, print out the notes and channels of everything in the buffer
+  if(isLooping){
+    Serial.print("There are ");
+    Serial.print(eventsBuffer.size());
+    Serial.println(" events in the buffer:");
+    for(unsigned int i=0; i<eventsBuffer.size(); i++){
+      Serial.print(F("Event in buffer -- Note"));
+      if(eventsBuffer[i].type==midi::NoteOn){
+        Serial.print(F("On:"));
+      } else if(eventsBuffer[i].type==midi::NoteOff){
+        Serial.print(F("Off:"));
+      } else{
+        Serial.print(F("TypeUnknown:"));
+      }
+      Serial.print(eventsBuffer[i].note);
+      Serial.print(F(" , Ch:"));
+      Serial.print(eventsBuffer[i].channel);
+      Serial.print(F(" ,v:"));
+      Serial.print(eventsBuffer[i].velocity);
+      Serial.print(F(" ,pn:"));
+      Serial.print(eventsBuffer[i].pulseNumber);
+      Serial.print(F(" ,pt:"));
+      Serial.println(eventsBuffer[i].playTime);
+    }
+  }
 }
 
 
@@ -1205,6 +1260,7 @@ byte readTempoDipswitch() {
   onesTempoPinUp = digitalRead(onesTempoPin) == LOW;
   twosTempoPinUp = digitalRead(twosTempoPin) == LOW;
   foursTempoPinUp = digitalRead(foursTempoPin) == LOW;
+  eightsTempoPinUp = digitalRead(eightsTempoPin) == LOW;
 
   int val = 0;
   if (onesTempoPinUp) {
@@ -1215,6 +1271,9 @@ byte readTempoDipswitch() {
   }
   if (foursTempoPinUp){
     val += 4;
+  }
+  if(eightsTempoPinUp){
+    val += 8;
   }
 
 
@@ -1566,8 +1625,12 @@ void playRetriggeredNotes(){
 //maybe I'll instead create a random number of steps and then walk down a filtered buffer of only
 //synth notes and/or only channel-sharing notes?
 MidiEvent maybePercolateNote(MidiEvent event, byte index_number){
+  //if a non-qualifying event, exit right away.
+  if(event.type != midi::NoteOn || !synthMIDIenabled[event.channel - 1]) {
+    return event;}
+
   //only do this for note on events for now (TODO: eugh, going to have to change note offs)
-  if(event.type==midi::NoteOn){
+  if(event.type == midi::NoteOn && synthMIDIenabled[event.channel - 1]){
     int random_step_count = random(0, STUTTER_TEMPERATURE);
     //50/50 chance of going up or down
     int8_t direction;
@@ -1582,13 +1645,13 @@ MidiEvent maybePercolateNote(MidiEvent event, byte index_number){
     unsigned int maxSteps = eventsBuffer.size();
     while(steps_taken<random_step_count&&maxSteps--){
       //we walk through eventsBuffer in the direction, we only count synth events.
-      working_index = (working_index + direction) % eventsBuffer.size();
+      working_index = (working_index + eventsBuffer.size() + direction) % eventsBuffer.size();
       if(synthMIDIenabled[eventsBuffer[working_index].channel-1] && eventsBuffer[working_index].type==midi::NoteOn){
         steps_taken++;
     }
   }
   if (maxSteps == 0) {
-  Serial.println(F("Warning: No synth events found, returning original note"));
+  Serial.println(F("Warning: No additional synth events found, returning original note"));
   return event;
   }
     //microoptimization--if we ended up where we started, just return the original note
@@ -1601,8 +1664,12 @@ MidiEvent maybePercolateNote(MidiEvent event, byte index_number){
     newEvent.note = newNote;
     Serial.print(F("Percollating note "));
     Serial.print(event.note);
+    Serial.print(F(" on channel "));
+    Serial.print(event.channel);
     Serial.print(F(" to "));
     Serial.println(newNote);
+    Serial.print(F(" on channel "));
+    Serial.println(eventsBuffer[working_index].channel);
     return newEvent;
   }
   else{return event;}

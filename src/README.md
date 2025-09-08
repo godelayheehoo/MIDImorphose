@@ -52,16 +52,25 @@ MIDI Mangler V2 is a PlatformIO-based Arduino project for the ATmega2560 (Mega) 
 
 ### Timing Resolution Table
 
-| Dipswitch Value | Pulse Resolution | Note Division      |
-|-----------------|------------------|--------------------|
-| 0               | 3                | 1/32 note          |
-| 1               | 6                | 1/16 note          |
-| 2               | 8                | 1/8 triplet        |
-| 3               | 12               | 1/8 note           |
-| 4               | 16               | dotted 1/8 note    |
-| 5               | 18               | 3/16 note          |
-| 6               | 24               | 1/4 note           |
-| 7               | 48               | 1/2 note           |
+| Dipswitch Value | Pulse Resolution | Note Division         |
+|-----------------|-----------------|---------------------|
+| 0               | 3               | 1/32 note           |
+| 1               | 4               | 1/32 triplet        |
+| 2               | 6               | 1/16 note           |
+| 3               | 8               | 1/16 triplet        |
+| 4               | 9               | dotted 1/16 note    |
+| 5               | 12              | 1/8 note            |
+| 6               | 15              | 5/32 note (odd)     |
+| 7               | 16              | 1/8 triplet         |
+| 8               | 18              | dotted 1/8 note     |
+| 9               | 24              | 1/4 note            |
+| 10              | 32              | 1/4 triplet         |
+| 11              | 36              | dotted 1/4 note     |
+| 12              | 48              | 1/2 note            |
+| 13              | 64              | 1/2 triplet         |
+| 14              | 72              | dotted 1/2 note     |
+| 15              | 96              | whole note          |
+
 
 ## Code Structure
 
