@@ -46,6 +46,9 @@ channel to off and updating.  There's nuance here though-- the stuttered notes w
 //todo: Retrigger OPTIONALLY affecting synths, only affecting drums
 //todo: update buttons to use ButtonHelper  
 //todo: temporarily make the menu options set by physical switches. 
+//todo: MAYBE add a second events buffer that *does* track events while stuttering. When we stutter,
+//we dump the contents of "tracker buffer" into stutter events buffer and keep tracking notes as normal.
+//will require significant rewriting. 
 #include <Arduino.h>
 #include <CircularBuffer.h>
 //midi stuff
@@ -221,6 +224,9 @@ const byte RETRIGGER_NOTE_LENGTH = 50; //doesn't matter for drums, might for sam
 const byte PITCHBEND_PROB_1000000000 = 3; //note: this is x/a billion not x/100 like normal.  Then we do the check three times!
 const byte NUM_ACTIVE_PITCHBENDS = 4;
 const bool PITCHBEND_ACTIVE = true;
+
+byte STUTTER_TEMPERATURE = 2; //this is used to randomly rearrange/resample notes during stutter, keeping the timing the same. 
+//this is currently NOT channel specific, which will be interesting. 
 
 //working pulse resolution size, we start with a quarter note (max pulses per stutter)
 unsigned int pulseResolution = MAX_PULSES_PER_STUTTER;
@@ -509,8 +515,25 @@ void forwardNote(MidiEvent event) {
   #endif
 
   if(event.type==midi::NoteOn){
+    //debug -- send note number, channel, and type
+    Serial.print("[");
+    Serial.print(millis());
+    Serial.print(F("] Forwarding NoteOn: note#"));
+    Serial.print(event.note);
+    Serial.print(F(" channel#"));
+    Serial.println(event.channel);
+    //end debug
     MIDI.sendNoteOn(event.note, event.velocity, event.channel);
   } else if(event.type==midi::NoteOff){
+    //debug
+        //debug -- send note number, channel, and type
+    Serial.print("[");
+    Serial.print(millis());
+    Serial.print(F("] Forwarding NoteOff: note#"));
+    Serial.print(event.note);
+    Serial.print(F(" channel#"));
+    Serial.println(event.channel);
+    //end debug
     MIDI.sendNoteOff(event.note, 0, event.channel);
   }
 }
@@ -939,6 +962,10 @@ else{
               Serial.println(channel);
             }
 #endif
+            //debug
+            Serial.print("BEFORE PROCESSING: Note:");
+            Serial.println(note);
+            //end debug
           newEvent.velocity = velocity;
           newEvent.playTime = millis();
           newEvent.played = false;
@@ -1140,6 +1167,11 @@ void playSavedPulses() {
       // Serial.print(event.channel);
       // Serial.print(F(" ,v:"));
       // Serial.println(event.velocity);
+
+      //if STUTTER_TEMPERATURE>0, we maybe percolate the note
+      if(STUTTER_TEMPERATURE>0){
+        event = maybePercolateNote(event);
+      }
 
       forwardNote(event);
     }
@@ -1396,7 +1428,7 @@ bool removeJitteredNote(byte oldNote, byte channel) {
 }
 
 // --- Find newNote(s) for a given oldNote & channel ---
-//not goign to use this function I think.  Leaving it for now so I can copy its logic
+//not going to use this function I think.  Leaving it for now so I can copy its logic
 void getJitterNewNotes(byte oldNote, byte channel, byte outNotes[], int &outCount) {
     outCount = 0;
     for (int i = 0; i < jitterCount; i++) {
@@ -1526,6 +1558,53 @@ void playRetriggeredNotes(){
 }
 //end retrigger functions
 
+//percolation of stutter
+///basically, this takes a midi event and randomly selects one within (-STUTTER_TEMPERATURE, STUTTER_TEMPERATURE) events of it
+//and maybe plays that note number instead.  This is ONLY done for note on events right now (I'm feeling lazy and memory shy),
+//we'll rely on the end-of-loop midi offs to turn off the notes.
+//this also works on ALL channels, which is going to be *weird* with drums.  We'll probably
+//need to fix that later as well but it's going to be kind of tough.  
+//maybe I'll instead create a random number of steps and then walk down a filtered buffer of only
+//synth notes and/or only channel-sharing notes?
+MidiEvent maybePercolateNote(MidiEvent event, byte index_number){
+  //only do this for note on events for now (TODO: eugh, going to have to change note offs)
+  if(event.type==midi::NoteOn){
+    int random_step_count = random(0, STUTTER_TEMPERATURE);
+    //50/50 chance of going up or down
+    int8_t direction;
+    if(randomProbResult(50)){
+      direction = 1;
+    }else{direction = -1;}
+    if(random_step_count==0){return event;} //no change
+    byte steps_taken = 0;
+    unsigned int working_index = index_number;
+    byte newNote;
+    //if we do a full loop, just return the original note, don't keep going. This should never happen.
+    unsigned int maxSteps = eventsBuffer.size();
+    while(steps_taken<random_step_count&&maxSteps--){
+      //we walk through eventsBuffer in the direction, we only count synth events.
+      working_index = (working_index + direction) % eventsBuffer.size();
+      if(synthMIDIenabled[eventsBuffer[working_index].channel-1] && eventsBuffer[working_index].type==midi::NoteOn){
+        steps_taken++;
+    }
+  }
+  if (maxSteps == 0) {
+  Serial.println(F("Warning: No synth events found, returning original note"));
+  return event;
+  }
+    //microoptimization--if we ended up where we started, just return the original note
+    if(working_index==index_number){return event;}
+    newNote = eventsBuffer[working_index].note;
+    MidiEvent newEvent = event; //copy everything else
+    newEvent.note = newNote;
+    Serial.print(F("Percollating note "));
+    Serial.print(event.note);
+    Serial.print(F(" to "));
+    Serial.println(newNote);
+    return newEvent;
+  }
+  else{return event;}
+}
 
 
 //////Display functions

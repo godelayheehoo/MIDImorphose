@@ -44,7 +44,9 @@ MIDI Mangler V2 is a PlatformIO-based Arduino project for the ATmega2560 (Mega) 
 2. **Channel Assignment:** Use dipswitches and the red/green buttons to assign drum/synth channels.
 3. **Timing Resolution:** Set tempo dipswitches to select pulse resolution (see table below).
 4. **Note Jitter & Retrigger:** Enable via menu or code options.
-5. **MIDI Panic:** Press the panic button to send "All Notes Off" to all active channels.
+- - Jitter set by black switch
+- - Retrigger set by red switch
+5. **MIDI Panic:** Press the panic button to send "All Notes Off" to all active channels. 
 6. **Displays:** OLED shows active channels; TM1637 shows stretch value.
 7. **Timestretching:** Adjust the stretch potentiometer to change the playback speed of the stuttered loop in real time.
 
