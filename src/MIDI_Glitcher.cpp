@@ -49,6 +49,9 @@ channel to off and updating.  There's nuance here though-- the stuttered notes w
 //todo: MAYBE add a second events buffer that *does* track events while stuttering. When we stutter,
 //we dump the contents of "tracker buffer" into stutter events buffer and keep tracking notes as normal.
 //will require significant rewriting. 
+//TODO: Add the ability to change the stutter temperature, probably from a menu. 
+//TODO: should actually maybe -- check if you haven't done this-- make sure that the temp swapping
+//only happens on notes whose time it is to be played, not on every loop.
 #include <Arduino.h>
 #include <CircularBuffer.h>
 //midi stuff
@@ -780,12 +783,8 @@ void loop() {
     oldStretchValue = stretchValue;
     lastTimeStretchPotUpdated = millis();
 
-     // Start temporary view
-    tempViewCallback = drawStretchDisplay;
-    tempViewStartTime = millis();
-    tempViewActive = true;
-
-    tempViewCallback();
+    
+    drawStretchDisplay();
 
    }
   }
@@ -1170,7 +1169,7 @@ void playSavedPulses() {
 
       //if STUTTER_TEMPERATURE>0, we maybe percolate the note
       if(STUTTER_TEMPERATURE>0){
-        event = maybePercolateNote(event);
+        event = maybePercolateNote(event, i);
       }
 
       forwardNote(event);
@@ -1595,6 +1594,9 @@ MidiEvent maybePercolateNote(MidiEvent event, byte index_number){
     //microoptimization--if we ended up where we started, just return the original note
     if(working_index==index_number){return event;}
     newNote = eventsBuffer[working_index].note;
+    //if we got the same note as before, don't create a new event, just return the original
+    if(newNote==event.note){return event;}
+    //otherwise, create a new event with the new note
     MidiEvent newEvent = event; //copy everything else
     newEvent.note = newNote;
     Serial.print(F("Percollating note "));
