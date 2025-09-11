@@ -72,7 +72,7 @@ channel to off and updating.  There's nuance here though-- the stuttered notes w
 #include <CircularBuffer.h>
 //midi stuff
 #include <MIDI.h>
-MIDI_CREATE_INSTANCE(HardwareSerial, Serial1, MIDI);
+MIDI_CREATE_INSTANCE(HardwareSerial, Serial8, MIDI);
 
 //display stuff
 //- OLED Screen
@@ -84,8 +84,8 @@ MIDI_CREATE_INSTANCE(HardwareSerial, Serial1, MIDI);
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 //- TM1637 (7-seg) screen
 #include <TM1637Display.h>
-#define CLK 11//pins definitions for TM1637 and can be changed to other ports       
-#define DIO 10
+#define CLK 7//pins definitions for TM1637 and can be changed to other ports       
+#define DIO 6
 TM1637Display seg7display(CLK, DIO); 
 
 // Temporary view system
@@ -140,13 +140,13 @@ struct ButtonHelper{
   // }
 
   //setup helper with given pin
-  void setup(int pin)
-  {
+ void setup(int pin, int mode = INPUT_PULLUP)
+{
     pinNumber = pin;
-    pinMode(pinNumber, INPUT_PULLUP);
+    pinMode(pinNumber, mode);             // use passed mode or default
     buttonState = digitalRead(pinNumber) == HIGH;
     lastButtonState = buttonState;
-  }
+}
 
 };
 
@@ -185,7 +185,7 @@ struct SwitchHelper{
 // const int playPin = 13;
 
 
-const int logButtonPin = 12;
+const int logButtonPin = 8;
 ButtonHelper logButton;
 
 
@@ -252,29 +252,29 @@ byte STUTTER_TEMPERATURE = 2; //this is used to randomly rearrange/resample note
 unsigned int pulseResolution = MAX_PULSES_PER_STUTTER;
 unsigned int oldPulseResolution = pulseResolution;
 // --- LED Pins ---
-const int bufferLedPin = 13; 
+const int bufferLedPin = 9; 
 
 // --- Button pins ---
 const int stutterButtonPin = 2;
 const int panicButtonPin = 3;
 ButtonHelper panicButton;
 
-const int drumMIDIButtonPin =  8;// the red button
-const int synthMIDIButtonPin = 9; // the green button
+const int drumMIDIButtonPin =  4;// the red button
+const int synthMIDIButtonPin = 5; // the green button
 
 // --- Tempo Dipswitch pins ---
-const byte onesTempoPin = 4;
-const byte twosTempoPin = 5;
-const byte foursTempoPin = 6;
-const byte eightsTempoPin = 7;
+const byte onesTempoPin = 14;
+const byte twosTempoPin = 15;
+const byte foursTempoPin = 16;
+const byte eightsTempoPin = 17;
 
 // --- "Scale"/Offset dipswitch pins
-const int onesOffsetPin = 23;
-const int twosOffsetPin = 24;
-const int foursOffsetPin = 26;
+const int onesOffsetPin = 11;
+const int twosOffsetPin = 20;
+const int foursOffsetPin = 12;
 
 // --- Potentiometer Pins ---
-int stretchPotPin = A0;
+int stretchPotPin = A17;
 
 // --- Loop buffer ---
 struct MidiEvent {
@@ -292,6 +292,14 @@ struct JitteredNote {
   byte newNote;
   byte channel;
 };
+
+struct PercNote {
+  byte originalNote;
+  byte newNote;
+  byte channel;
+};
+
+
 
 struct PitchBender {
     byte channel;
@@ -458,22 +466,22 @@ unsigned long dummyTime;
 //midi channels
 // Map MIDI channels 1–16 to pins
 const uint8_t midiPins[16] = {
-  35,  // channel 1
-  37,  // channel 2
-  39,  // channel 3
-  41,  // channel 4
-  43,  // channel 5
-  45,  // channel 6
-  47,  // channel 7
-  49,  // channel 8
-  51,  // channel 9
-  53,  // channel 10
-  52,  // channel 11
-  50,  // channel 12
-  48,  // channel 13
-  46,  // channel 14
-  44,  // channel 15
-  42   // channel 16
+  21,  // channel 1
+  22,  // channel 2
+  23,  // channel 3
+  24,  // channel 4
+  25,  // channel 5
+  26,  // channel 6
+  27,  // channel 7
+  28,  // channel 8
+  29,  // channel 9
+  30,  // channel 10
+  31,  // channel 11
+  32,  // channel 12
+  33,  // channel 13
+  36,  // channel 14
+  37,  // channel 15
+  38   // channel 16
 };
 // Array to track which channels are ON
 
@@ -503,8 +511,8 @@ bool activeNotes[MAX_NOTES] = { false };
 // --- Menu States ---
 bool retriggerOn = false; //todo: add to menu
 bool synthJitterOn = false; //todo: add to menu
-const int retriggerSwitchPin = 25;
-const int synthJitterSwitchPin = 26;
+const int retriggerSwitchPin = 40;
+const int synthJitterSwitchPin = 39;
 SwitchHelper retriggerSwitch;
 SwitchHelper synthJitterSwitch;
 
@@ -709,9 +717,9 @@ void setup() {
   pinMode(twosOffsetPin, INPUT_PULLUP);
   pinMode(foursOffsetPin, INPUT_PULLUP);
   pinMode(bufferLedPin, OUTPUT);
-  pinMode(drumMIDIButtonPin, INPUT_PULLUP);
-  pinMode(synthMIDIButtonPin, INPUT_PULLUP);
-  logButton.setup(logButtonPin);
+  pinMode(drumMIDIButtonPin, INPUT); //trying just input --works
+  pinMode(synthMIDIButtonPin, INPUT); //trying just input --works
+  logButton.setup(logButtonPin, INPUT);
 
   retriggerSwitch.setup(retriggerSwitchPin);
   synthJitterSwitch.setup(synthJitterSwitchPin);
@@ -772,6 +780,7 @@ void loop() {
 
 
   stutterButtonPressed = readStutterButton();
+  
   //probably remove soon 
   // panicButtonPressed = digitalRead(panicButtonPin) == HIGH;
 
@@ -791,6 +800,7 @@ void loop() {
 // read switches and build new state
   //get pot value
   stretchPotValueLiteral = analogRead(stretchPotPin);
+
   stretchPotValueFloat = 0.1 + 3.9*(stretchPotValueLiteral/1023.0);
 //smoothing
   stretchValue =  0.95 * stretchValue + 0.05 * stretchPotValueFloat;
@@ -803,6 +813,7 @@ void loop() {
 
     
     drawStretchDisplay();
+
 
    }
   }
@@ -888,7 +899,7 @@ if (panicButton.update()) {
 
   ///stutter button is pressed
   if (stutterButtonPressed && !prevStutterPressed) {
-    
+    Serial.println("Stutter button pressed!");
     digitalWrite(bufferLedPin,LOW);
     //
     //kill existing notes on tracked channels
@@ -1249,6 +1260,7 @@ bool readStutterButton() {
       buttonState = reading;
     }
   }
+
 
   lastButtonState = reading;
 

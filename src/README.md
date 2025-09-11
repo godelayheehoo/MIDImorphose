@@ -21,22 +21,28 @@ MIDI Mangler V2 is a PlatformIO-based Arduino project for the ATmega2560 (Mega) 
 ## Hardware Setup
 
 - **Board:** Arduino Mega (ATmega2560)
-- **MIDI:** Uses Serial1 for MIDI input/output.
+- **MIDI:** Uses Serial8 for MIDI input/output.
 - **Buttons:**
   - Stutter button (pin 2)
   - Panic button (pin 3)
-  - Drum MIDI assign button (pin 8, red)
-  - Synth MIDI assign button (pin 9, green)
-  - Log button (pin 12)
+  - Drum MIDI assign button (pin 4, red)
+  - Synth MIDI assign button (pin 5, green)
+  - Log button (pin 8)
 - **Dipswitches:**
-  - Tempo: pins 4, 5, 6
-  - Offset/Scale: pins 23, 24, 26
-  - MIDI channel assignment: pins 35–53 (see code for mapping)
+  - Tempo: pins 14 (ones), 15 (twos), 16 (fours), 17 (eights)
+  - Offset/Scale: pins 11 (ones), 20 (twos), 12 (fours)
+  - MIDI channel assignment: pins 21–38 (see code for mapping)
 - **Displays:**
   - OLED (SSD1306, I2C)
-  - TM1637 7-segment (pins 10, 11)
+  - TM1637 7-segment (pins 7 [CLK], 6 [DIO])
 - **LEDs:**
-  - Buffer full indicator (pin 7)
+  - Buffer full indicator (pin 9)
+
+- **Switches:**
+  - Retrigger switch (pin 40)
+  - Synth jitter switch (pin 39)
+- **Potentiometer:**
+  - Stretch potentiometer (pin A17)
 
 ## Usage
 
