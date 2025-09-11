@@ -51,8 +51,6 @@ channel to off and updating.  There's nuance here though-- the stuttered notes w
 //change more ints to bytes?
 //todo: config mode?  Maybe not necessary with current setup -- actually, not doable until I get the teensy.
 //todo: consider updating display to reflect changes to pulseResolution?
-//todo: I don't like that panic displays panic and then to get back to a normal display I have to re-set drum or synth assignments via the buttons+dipswitches.  Though maybe that's okay.
-//todo: create a "hold display" button that lets me have some message show for 2 seconds or whatever then go back to whatever I want my default to be
 //todo: it's kind of cool when I lower the events buffer way low and loop off of that, maybe make that something you can turn on/off
 //todo: Figure out how I want to handle drum note numbers (for equivalent to jitter).  Could assign them per channel and "know" some like the dbi's, could also "learn" them per-channel (could get memory heavy)
 //todo: update code to use the createOffNote() function where appropraite
@@ -177,12 +175,7 @@ struct SwitchHelper{
     switchState = digitalRead(pinNumber) == HIGH;
     lastSwitchState = switchState;
   }
-  
-
 };
-//buttons using helper
-// ButtonHelper playButton;
-// const int playPin = 13;
 
 
 const int logButtonPin = 8;
@@ -196,9 +189,11 @@ ButtonHelper logButton;
 const int MAX_PULSES_PER_STUTTER = 96;  //24 pulses -> 1 quarter note
 //ChatGPT says I can get away with 8 max events per pulse. I'll try 16 for now.  Trying to cut down on memory.
 //This could be set as a function of MAX_PULSES_PER_STUTTER
-const int MAX_EVENTS = 4 * MAX_PULSES_PER_STUTTER;
+const int MAX_EVENTS = 8 * MAX_PULSES_PER_STUTTER;
 // const int MAX_EVENTS = 100; //testing
 // const int MAX_EVENTS = 5;
+
+const byte MAX_DRUM_MACHINE_INSTRUMENTS = 16; //max number of different instruments we can track per drum machine
 
 
 const byte BUFFER_FULL_LED_BLINK_TIME = 20;
@@ -206,6 +201,8 @@ const byte BUFFER_FULL_LED_BLINK_COUNT = 4; //needs to be twice the number of bl
 
 const float MIN_STRETCH_INTERVAL_UPDATE = 200;
 const int MAX_INSTRUMENTS = 16;
+
+
 
 //TODO: Set scale based on dipswitches, including "no scale" as option
 //TODO: Note glitch always or just when stuttering? Let's go with always for now?
@@ -299,6 +296,38 @@ struct PercNote {
   byte channel;
 };
 
+// //this will be used for drum machine jittering.
+// struct DrumMachineNotes{
+//   //note/instrument numbers for a given drum machine, support up to 16? 
+//   //initialize all to 0
+//   byte instrumentNumbers[MAX_DRUM_MACHINE_INSTRUMENTS] = {0};
+//   byte instrumentNumberSize = 0;
+//   byte channel;
+//   bool isDrumMachine = false;
+
+//   void addInstrumentNumber(byte num){
+//     //if we're adding an instrument, we assume we're a drum machine
+//     isDrumMachine = true;
+//     //check if we already have this number, skip if so
+//     for(int i=0; i<instrumentNumberSize; i++){
+//       if(instrumentNumbers[i]==num){return;}
+//     }
+//     if(instrumentNumberSize<MAX_DRUM_MACHINE_INSTRUMENTS){
+//       instrumentNumbers[instrumentNumberSize]=num;
+//       instrumentNumberSize++;
+//     }
+//   }
+
+//   //get a random instrument number from the set
+//   byte getRandomInstrumentNumber(){
+//     if(instrumentNumberSize==0){return 0;}
+//     int index = random(0,instrumentNumberSize);
+//     return instrumentNumbers[index];
+//   }
+
+//   DrumMachineNotes(byte ch): channel(ch){}
+
+// };
 
 
 struct PitchBender {
@@ -385,7 +414,9 @@ struct PitchBender {
 
 // --- Buffers ---
 CircularBuffer<MidiEvent, MAX_EVENTS> eventsBuffer;
+CircularBuffer<MidiEvent, MAX_EVENTS> stutterBuffer; //this is used to save the events that are being stuttered
 CircularBuffer<unsigned long, MAX_PULSES_PER_STUTTER> pulseStartTimes;
+CircularBuffer<unsigned long, MAX_PULSES_PER_STUTTER> stutterPulseStartTimes; 
 CircularBuffer<MidiEvent, RETRIGGER_BUFFER_SIZE> retriggerBuffer; //maybe change this to "delayedNotesBuffer" if we end up doing that (holding back some notes for a little)
 CircularBuffer<PitchBender, NUM_ACTIVE_PITCHBENDS> pitchbendBuffer;
 JitteredNote jitterBuffer[JITTER_BUFFER_SIZE];
@@ -662,6 +693,7 @@ MidiEvent createEmptyEvent(byte pulseNumber);
 
 void handleClock();
 
+//probably can get rid of the buffer full stuff.
 void triggerBufferFullBlink();
 void updateBufferFullBlink();
 void checkPulseBufferFullSetLED();
@@ -908,6 +940,11 @@ if (panicButton.update()) {
     //debug
     // Serial.print("set loopStartTime to:");
     // Serial.println(loopStartTime);
+    
+    //copy eventsBuffer to stutterBuffer
+    stutterBuffer = eventsBuffer;
+    //copy pulseStartTimes to stutterPulseStartTimes
+    stutterPulseStartTimes = pulseStartTimes;
     isLooping = true;
         //debug
     // Serial.print("<<<<<<<<NEW STUTTER: pst:");
@@ -920,11 +957,11 @@ if (panicButton.update()) {
     isLooping = false;
     killTrackedChannelsNotes();
     //clear out stored notes
-    while (!eventsBuffer.empty()) {
-      eventsBuffer.pop(dummyEvent);
+    while (!stutterBuffer.empty()) {
+      stutterBuffer.pop(dummyEvent);
     }
-    while(!pulseStartTimes.empty()){
-      pulseStartTimes.pop(dummyTime);
+    while(!stutterPulseStartTimes.empty()){
+      stutterPulseStartTimes.pop(dummyTime);
     }
   }
 
@@ -1018,9 +1055,10 @@ else{
           //note the jittered note does get sent to the buffer -- change from before, which jittered within the buffer. (so now if we jitter 46->48, we stutter the 48 each time)
           }
 
-          //if not looping AND we're on a tracked channel, add to buffer.  Two ifs because I expect to come back in here and add other sblocks
-          if(!isLooping){
-            if(checkIfMIDIOn(channel)){
+          // //if not looping AND we're on a tracked channel, add to buffer.  Two ifs because I expect to come back in here and add other sblocks
+          // if(!isLooping){
+          //we now append to buffer even if we're looping, since we have the stutterEventsBuffer now.
+          if(checkIfMIDIOn(channel)){
           if(type == midi::NoteOn || (type == midi::NoteOff && checkForNoteOn(newEvent.note))){
               //check if buffer is full now
                if ((eventsBuffer.size()==MAX_EVENTS) && !isBlinking) {
@@ -1046,7 +1084,7 @@ else{
               
           }
           }//end of checkIfMIDIOn
-          }//end isLooping
+          // }//end isLooping
           //if we're not looping OR we're on an untracked channel-- the contents of this block, pass through the note 
 
 
@@ -1085,7 +1123,7 @@ if(validLoopFlag){
 
 
     //get the length of the playback for only the last 'pulseResolution' pulses
-    playbackStartTime = pulseStartTimes[0];
+    playbackStartTime = stutterPulseStartTimes[0];
     //this is left as-is rather than just doing playbackLenght = loopStartTime - playbackStartTime in anticipation of the bpm-estimation pulse-ending logic
     playbackEndTime = loopStartTime;
     //moving playbackLength setting to inside the isLooping Loop, outside of !prevLooping guard, so that it responds to movements of the stretch knob
@@ -1109,9 +1147,9 @@ if(validLoopFlag){
     if (millis() - loopStartTime > playbackLength) {
 
       loopStartTime = millis();
-      for (unsigned int i = 0; i < eventsBuffer.size(); i++) {
+      for (unsigned int i = 0; i < stutterBuffer.size(); i++) {
         // Iterate through all events in this pulse.  Note this resets ALL, not just the ones that are active due to pulseResolution
-        eventsBuffer[i].played = false;
+        stutterBuffer[i].played = false;
       }
       //kill all midi Notes on tracked channels at the end of the loop (we may not have the note-offs for all our note-ons, so this is necessary)
       killTrackedChannelsNotes();
@@ -1187,10 +1225,10 @@ void playSavedPulses() {
     // Serial.println(eventsBuffer.size());
 
   // Iterate through all saved pulses
-  for (unsigned int i = 0; i < eventsBuffer.size(); i++) {
+  for (unsigned int i = 0; i < stutterBuffer.size(); i++) {
     // Iterate through all events
 
-    MidiEvent& event = eventsBuffer[i];  // Use reference to original
+    MidiEvent& event = stutterBuffer[i];  // Use reference to original
     //todo: maybe fix this?s
     // Serial.print("first pulse in events buffer:");
     // Serial.print(eventsBuffer[0].pulseNumber);
@@ -1328,8 +1366,7 @@ void updateOffsetSwitches(){
 }
 
 void clearOldNotes(int expiredPulse) {
-  // Serial.print("Clearing out pulse #");
-  // Serial.println(expiredPulse);
+  //this is used to remove the old pulses from events buffer, so we're using the right one (not stutterBuffer)
   eventsBuffer.removeIf([&](const MidiEvent& e) {
     return e.pulseNumber == expiredPulse;  // use the pulse you actually want to clear
   });
@@ -1471,6 +1508,7 @@ void pruneBends(){
 bool addJitteredNote(byte oldNote, byte newNote, byte channel) {
     if (jitterCount >= JITTER_BUFFER_SIZE) {
         // buffer full, handle warning elsewhere (LED blink)
+        Serial.println("WARNING: Jitter buffer full!");
         return false;
     }
     jitterBuffer[jitterCount++] = {oldNote, newNote, channel};
