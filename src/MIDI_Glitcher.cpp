@@ -68,6 +68,8 @@ channel to off and updating.  There's nuance here though-- the stuttered notes w
 //TODO: add full reversal.  WIll require changing reference in playedSavedPulses to use a copy of the event,
 //but make sure we're still updating played correctly.  
 //TODO: percolation needs note off handling added.  This is basically already solved in retrigger.
+//TODO: percolation seems to degenerate, like it gets stuck to a certain note.  Maybe it's not undoing its buffer or something. Maybe it *is* editing notes in place. 
+
 #include <Arduino.h>
 #include <CircularBuffer.h>
 #include <Adafruit_MCP23X17.h>
@@ -101,13 +103,24 @@ const unsigned long TEMP_DISPLAY_TIME = 2000;  // milliseconds
 #include <Adafruit_GFX.h>
 #include <Adafruit_ST7789.h>
 #include <SPI.h>
+#include "MenuManager.h"
 // Pin setup
 #define TFT_CS   0
 #define TFT_DC   28
 #define TFT_RST  -1
 
+//menu setup
 // SPI1 hardware peripheral
 Adafruit_ST7789 menuTft = Adafruit_ST7789(&SPI1, TFT_CS, TFT_DC, TFT_RST);
+MenuManager menu(menuTft);
+enum MenuButton {
+    BUTTON_NONE,
+    BUTTON_UP,
+    BUTTON_DOWN,
+    BUTTON_LEFT,
+    BUTTON_RIGHT,
+    BUTTON_SELECT
+};
 
 //controls interaction stuf
 //debug stuff
@@ -259,7 +272,7 @@ const byte PITCHBEND_PROB_1000000000 = 3; //note: this is x/a billion not x/100 
 const byte NUM_ACTIVE_PITCHBENDS = 4;
 const bool PITCHBEND_ACTIVE = true;
 
-byte STUTTER_TEMPERATURE = 2; //this is used to randomly rearrange/resample notes during stutter, keeping the timing the same. 
+byte STUTTER_TEMPERATURE = 0; //this is used to randomly rearrange/resample notes during stutter, keeping the timing the same. 
 //this is currently NOT channel specific, which will be interesting. 
 
 //working pulse resolution size, we start with a quarter note (max pulses per stutter)
@@ -660,6 +673,15 @@ byte randomOctave() {
   return 0;                        // 0–59 → 60%
 }
 
+// MenuButton getLastButtonPressed() {
+//     if (digitalRead(UP_PIN) == LOW) return BUTTON_UP;
+//     if (digitalReadDOWN_PIN) == LOW) return BUTTON_DOWN;
+//     if (digitalReadLEFT_PIN) == LOW) return BUTTON_LEFT;
+//     if (digitalReadRIGHT_PIN) == LOW) return BUTTON_RIGHT;
+//     if (digitalReadSELECT_PIN) == LOW) return BUTTON_SELECT;
+//     return BUTTON_NONE;
+// }
+
 //function prototypes
 void playSavedPulses();
 
@@ -773,20 +795,24 @@ Serial.println(F("Drawing SD matrix again (why?)"));
   updateOffsetSwitches();
 
 
-  //setup menu screen
+  // //setup menu screen
   SPI1.begin();
-  Serial.println("Set up SPI1");
+  // Serial.println("Set up SPI1");
 
   menuTft.init(135, 240);   // correct for 240x135 ST7789
   menuTft.setRotation(3);   // landscape
   Serial.println("init screen");
 
-  menuTft.fillScreen(ST77XX_WHITE);
+  // menuTft.fillScreen(ST77XX_WHITE);
 
+  // menuTft.setTextColor(ST77XX_BLACK);
+  // menuTft.setCursor(10, 10);
+  // menuTft.setTextSize(2);
+  // menuTft.print(F("MIDI Glitcher"));
 
+  menu.render();
+  
   Serial.println(F("Ending setup"));
-  
-  
 }
 
 void loop() {
