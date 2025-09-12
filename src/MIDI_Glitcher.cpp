@@ -83,7 +83,7 @@ MIDI_CREATE_INSTANCE(HardwareSerial, Serial8, MIDI);
 #define SCREEN_WIDTH 128
 #define SCREEN_HEIGHT 64
 #define OLED_RESET -1
-Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
+Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire2, OLED_RESET);
 //- TM1637 (7-seg) screen
 #include <TM1637Display.h>
 #define CLK 7//pins definitions for TM1637 and can be changed to other ports       
