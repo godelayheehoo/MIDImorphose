@@ -97,6 +97,18 @@ void (*tempViewCallback)() = nullptr;
 
 const unsigned long TEMP_DISPLAY_TIME = 2000;  // milliseconds
 
+//menu display
+#include <Adafruit_GFX.h>
+#include <Adafruit_ST7789.h>
+#include <SPI.h>
+// Pin setup
+#define TFT_CS   0
+#define TFT_DC   28
+#define TFT_RST  -1
+
+// SPI1 hardware peripheral
+Adafruit_ST7789 menuTft = Adafruit_ST7789(&SPI1, TFT_CS, TFT_DC, TFT_RST);
+
 //controls interaction stuf
 //debug stuff
 #define DEBUG
@@ -753,18 +765,24 @@ Serial.println(F("Drawing SD matrix again (why?)"));
 //setup 7seg-- 0x0f is 15.
   seg7display.setBrightness(0x0f); 
 
-//TODO: set this, note lack of semicolon to force error
-//TEST -- just write a number
+
   drawStretchDisplay();
 
   digitalWrite(bufferLedPin, LOW);
 
   updateOffsetSwitches();
 
-  ///controls arduino interaction
-  // Wire.begin(SLAVE_ADDR);      // join secondary I2C bus as slave
-  // Wire.onReceive(conrolsReceiveEvent); 
-  // Wire.onRequest(controlsRequestEvent); 
+
+  //setup menu screen
+  SPI1.begin();
+  Serial.println("Set up SPI1");
+
+  menuTft.init(135, 240);   // correct for 240x135 ST7789
+  menuTft.setRotation(3);   // landscape
+  Serial.println("init screen");
+
+  menuTft.fillScreen(ST77XX_WHITE);
+
 
   Serial.println(F("Ending setup"));
   
@@ -772,11 +790,11 @@ Serial.println(F("Drawing SD matrix again (why?)"));
 }
 
 void loop() {
-  //check for incoming nano messages
-    //   if (readSerial2NonBlocking(msg)) {
-    //     processMessage(msg); // your function in .ino
-    // }
- 
+  //debug, just flash colors on menu for now -- will need to add timing if you want to use this. 
+  // menuTft.fillScreen(ST77XX_RED);
+  // menuTft.fillScreen(ST77XX_GREEN);
+  // menuTft.fillScreen(ST77XX_BLUE);
+
   //////Button & switch reads
   if(retriggerSwitch.update()){
     Serial.println(F("Retrigger switch changed!"));
