@@ -68,6 +68,8 @@ channel to off and updating.  There's nuance here though-- the stuttered notes w
 //TODO: percolation needs note off handling added.  This is basically already solved in retrigger.
 #include <Arduino.h>
 #include <CircularBuffer.h>
+#include <Adafruit_MCP23X17.h>
+Adafruit_MCP23X17 mcp;
 //midi stuff
 #include <MIDI.h>
 MIDI_CREATE_INSTANCE(HardwareSerial, Serial8, MIDI);
@@ -496,23 +498,24 @@ unsigned long dummyTime;
 //TODO: figure out why this isn't working.
 //midi channels
 // Map MIDI channels 1–16 to pins
+//These are MCP pins!
 const uint8_t midiPins[16] = {
-  21,  // channel 1
-  22,  // channel 2
-  23,  // channel 3
-  24,  // channel 4
-  25,  // channel 5
-  26,  // channel 6
-  27,  // channel 7
-  28,  // channel 8
-  29,  // channel 9
-  30,  // channel 10
-  31,  // channel 11
-  32,  // channel 12
-  33,  // channel 13
-  36,  // channel 14
-  37,  // channel 15
-  38   // channel 16
+  0,  // channel 1
+  1,  // channel 2
+  2,  // channel 3
+  3,  // channel 4
+  4,  // channel 5
+  5,  // channel 6
+  6,  // channel 7
+  7,  // channel 8
+  15,  // channel 9
+  14,  // channel 10
+  13,  // channel 11
+  12,  // channel 12
+  11,  // channel 13
+  10,  // channel 14
+  9,  // channel 15
+  8   // channel 16
 };
 // Array to track which channels are ON
 
@@ -731,6 +734,14 @@ void setup() {
 
   Serial.println(F("Starting setup"));
 
+  Serial.println(F("Setting up MCP"));
+  Wire2.begin();      
+  if (!mcp.begin_I2C(0x27, &Wire2)) {
+    Serial.println("MCP23017 not found!");
+    for (;;);
+  }
+  Serial.println("MCP23017 initialized.");
+
   Serial.println(F("Entering setup display"));
   //display setup
   setupDisplay();
@@ -763,9 +774,10 @@ void setup() {
   MIDI.begin(MIDI_CHANNEL_OMNI);
   MIDI.turnThruOff();
 
-  //setup midi channels -- edit later for S&D arrays.
+  //setup midi channels -- edit later for S&D arrays. This uses mcp pins
   for (int i = 0; i < 16; i++) {
-    pinMode(midiPins[i], INPUT_PULLUP);
+       mcp.pinMode(midiPins[i], INPUT_PULLUP);
+      mcp.digitalWrite(midiPins[i], HIGH);
   }
 
 Serial.println(F("Drawing SD matrix again (why?)"));
@@ -793,6 +805,7 @@ Serial.println(F("Drawing SD matrix again (why?)"));
 }
 
 void loop() {
+
   //check for incoming nano messages
     //   if (readSerial2NonBlocking(msg)) {
     //     processMessage(msg); // your function in .ino
@@ -1818,7 +1831,7 @@ void drawSDMatrix(bool drumArr[16], bool synthArr[16]) {
 void updateSynthSwitches(){
 newSynthState = 0;
 for (int i = 0; i < 16; i++) {
-    bool channelState = (digitalRead(midiPins[i]) == LOW);
+    bool channelState = (mcp.digitalRead(midiPins[i]) == LOW);
     synthMIDIenabled[i] = channelState;
     if (channelState) {
         newSynthState |= (1 << i);
@@ -1835,7 +1848,7 @@ for (int i = 0; i < 16; i++) {
 void updateDrumSwitches(){
 newDrumState = 0;
 for (int i = 0; i < 16; i++) {
-    bool channelState = (digitalRead(midiPins[i]) == LOW);
+    bool channelState = (mcp.digitalRead(midiPins[i]) == LOW);
     drumMIDIenabled[i] = channelState;
     if (channelState) {
         newDrumState |= (1 << i);
