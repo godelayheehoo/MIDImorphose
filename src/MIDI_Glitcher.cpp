@@ -68,10 +68,14 @@ channel to off and updating.  There's nuance here though-- the stuttered notes w
 //TODO: add full reversal.  WIll require changing reference in playedSavedPulses to use a copy of the event,
 //but make sure we're still updating played correctly.  
 //TODO: percolation needs note off handling added.  This is basically already solved in retrigger.
+//TODO: percolation seems to degenerate, like it gets stuck to a certain note.  Maybe it's not undoing its buffer or something. Maybe it *is* editing notes in place. 
+
+
 #include <Arduino.h>
 #include <CircularBuffer.h>
 #include <Adafruit_MCP23X17.h>
-Adafruit_MCP23X17 mcp;
+Adafruit_MCP23X17 mcpMIDI;
+Adafruit_MCP23X17 mcpControls;
 //midi stuff
 #include <MIDI.h>
 MIDI_CREATE_INSTANCE(HardwareSerial, Serial8, MIDI);
@@ -106,10 +110,91 @@ const unsigned long TEMP_DISPLAY_TIME = 2000;  // milliseconds
 #define TFT_DC   28
 #define TFT_RST  -1
 
+//menu setup
 // SPI1 hardware peripheral
 Adafruit_ST7789 menuTft = Adafruit_ST7789(&SPI1, TFT_CS, TFT_DC, TFT_RST);
+// MenuManager menu(menuTft);
+// enum MenuButton {
+//     BUTTON_NONE,
+//     BUTTON_UP,
+//     BUTTON_DOWN,
+//     BUTTON_LEFT,
+//     BUTTON_RIGHT,
+//     BUTTON_SELECT
+// };
 
 //controls interaction stuf
+
+// -----------------
+// KEYPAD
+// -----------------
+struct MatrixKeypad {
+  static const uint8_t ROWS = 4;
+  static const uint8_t COLS = 4;
+
+  uint8_t rowPins[ROWS];
+  uint8_t colPins[COLS];
+  bool lastState[ROWS][COLS];
+
+  char keymap[ROWS][COLS] = {
+    {'1','2','3','A'},
+    {'4','5','6','B'},
+    {'7','8','9','C'},
+    {'*','0','#','D'}
+  };
+
+  void begin(const uint8_t* rPins, const uint8_t* cPins) {
+    for (uint8_t i = 0; i < ROWS; i++) rowPins[i] = rPins[i];
+    for (uint8_t i = 0; i < COLS; i++) colPins[i] = cPins[i];
+
+    for (uint8_t r = 0; r < ROWS; r++) {
+      mcpControls.pinMode(rowPins[r], OUTPUT);
+      mcpControls.digitalWrite(rowPins[r], HIGH);
+    }
+
+    for (uint8_t c = 0; c < COLS; c++) {
+      mcpControls.pinMode(colPins[c], INPUT_PULLUP);
+      mcpControls.digitalWrite(colPins[c], HIGH);
+    }
+
+    for (uint8_t r = 0; r < ROWS; r++)
+      for (uint8_t c = 0; c < COLS; c++)
+        lastState[r][c] = false;
+  }
+
+  void update() {
+    for (uint8_t r = 0; r < ROWS; r++) {
+      mcpControls.digitalWrite(rowPins[r], LOW);
+
+      for (uint8_t c = 0; c < COLS; c++) {
+        bool pressed = (mcpControls.digitalRead(colPins[c]) == LOW);
+
+        if (pressed && !lastState[r][c]) onPress(r, c, keymap[r][c]);
+        if (!pressed && lastState[r][c]) onRelease(r, c, keymap[r][c]);
+
+        lastState[r][c] = pressed;
+      }
+
+      mcpControls.digitalWrite(rowPins[r], HIGH);
+    }
+  }
+
+  void onPress(uint8_t, uint8_t, char key) {
+    Serial.print("Pressed: ");
+    Serial.println(key);
+  }
+
+  void onRelease(uint8_t, uint8_t, char key) {
+    Serial.print("Released: ");
+    Serial.println(key);
+  }
+};
+
+const uint8_t COL_PINS[4] = {11, 10, 9, 8};
+const uint8_t ROW_PINS[4] = {15, 14, 13, 12};
+
+MatrixKeypad keypad;
+
 //debug stuff
 #define DEBUG
 #define ACTIVE_NOTES_DEBUG
@@ -259,7 +344,7 @@ const byte PITCHBEND_PROB_1000000000 = 3; //note: this is x/a billion not x/100 
 const byte NUM_ACTIVE_PITCHBENDS = 4;
 const bool PITCHBEND_ACTIVE = true;
 
-byte STUTTER_TEMPERATURE = 2; //this is used to randomly rearrange/resample notes during stutter, keeping the timing the same. 
+byte STUTTER_TEMPERATURE = 0; //this is used to randomly rearrange/resample notes during stutter, keeping the timing the same. 
 //this is currently NOT channel specific, which will be interesting. 
 
 //working pulse resolution size, we start with a quarter note (max pulses per stutter)
@@ -660,6 +745,15 @@ byte randomOctave() {
   return 0;                        // 0–59 → 60%
 }
 
+// MenuButton getLastButtonPressed() {
+//     if (digitalRead(UP_PIN) == LOW) return BUTTON_UP;
+//     if (digitalReadDOWN_PIN) == LOW) return BUTTON_DOWN;
+//     if (digitalReadLEFT_PIN) == LOW) return BUTTON_LEFT;
+//     if (digitalReadRIGHT_PIN) == LOW) return BUTTON_RIGHT;
+//     if (digitalReadSELECT_PIN) == LOW) return BUTTON_SELECT;
+//     return BUTTON_NONE;
+// }
+
 //function prototypes
 void playSavedPulses();
 
@@ -712,13 +806,20 @@ void setup() {
   Serial.begin(115200);
 
   Serial.println(F("Starting setup"));
-    Serial.println(F("Setting up MCP"));
+    Serial.println(F("Setting up mcpMIDI"));
   Wire2.begin();      
-  if (!mcp.begin_I2C(0x27, &Wire2)) {
-    Serial.println("MCP23017 not found!");
+  if (!mcpMIDI.begin_I2C(0x27, &Wire2)) {
+    Serial.println("MCP23017 not found on 0x27!");
     for (;;);
   }
-  Serial.println("MCP23017 initialized.");
+  Serial.println("MCP23017 on 0x27 initialized.");
+
+     
+  if (!mcpControls.begin_I2C(0x25, &Wire2)) {
+    Serial.println("MCP23017 not found on 0x25!");
+    for (;;);
+  }
+  Serial.println("MCP23017 on 0x25 initialized.");
 
   Serial.println(F("Entering setup display"));
   //display setup
@@ -755,8 +856,8 @@ void setup() {
 
    //setup midi channels -- edit later for S&D arrays. This uses mcp pins
   for (int i = 0; i < 16; i++) {
-       mcp.pinMode(midiPins[i], INPUT_PULLUP);
-      mcp.digitalWrite(midiPins[i], HIGH);
+       mcpMIDI.pinMode(midiPins[i], INPUT_PULLUP);
+      mcpMIDI.digitalWrite(midiPins[i], HIGH);
   }
 
 Serial.println(F("Drawing SD matrix again (why?)"));
@@ -773,9 +874,9 @@ Serial.println(F("Drawing SD matrix again (why?)"));
   updateOffsetSwitches();
 
 
-  //setup menu screen
+  // //setup menu screen
   SPI1.begin();
-  Serial.println("Set up SPI1");
+  // Serial.println("Set up SPI1");
 
   menuTft.init(135, 240);   // correct for 240x135 ST7789
   menuTft.setRotation(3);   // landscape
@@ -783,10 +884,16 @@ Serial.println(F("Drawing SD matrix again (why?)"));
 
   menuTft.fillScreen(ST77XX_WHITE);
 
+  menuTft.setTextColor(ST77XX_BLACK);
+  menuTft.setCursor(10, 10);
+  menuTft.setTextSize(2);
+  menuTft.print(F("MIDI Glitcher"));
 
+  Serial.println("setting up keyboard");
+  keypad.begin(ROW_PINS, COL_PINS);
+
+  
   Serial.println(F("Ending setup"));
-  
-  
 }
 
 void loop() {
@@ -794,6 +901,14 @@ void loop() {
   // menuTft.fillScreen(ST77XX_RED);
   // menuTft.fillScreen(ST77XX_GREEN);
   // menuTft.fillScreen(ST77XX_BLUE);
+
+  //debug
+    // --- Poll keypad every 50ms ---
+  static unsigned long lastKeypadUpdate = 0;
+  if (millis() - lastKeypadUpdate > 50) {
+    keypad.update();
+    lastKeypadUpdate = millis();
+  }
 
   //////Button & switch reads
   if(retriggerSwitch.update()){
@@ -1809,7 +1924,7 @@ void drawSDMatrix(bool drumArr[16], bool synthArr[16]) {
 void updateSynthSwitches(){
 newSynthState = 0;
 for (int i = 0; i < 16; i++) {
-    bool channelState = (mcp.digitalRead(midiPins[i]) == LOW);
+    bool channelState = (mcpMIDI.digitalRead(midiPins[i]) == LOW);
     synthMIDIenabled[i] = channelState;
     if (channelState) {
         newSynthState |= (1 << i);
@@ -1826,7 +1941,7 @@ for (int i = 0; i < 16; i++) {
 void updateDrumSwitches(){
 newDrumState = 0;
 for (int i = 0; i < 16; i++) {
-    bool channelState = (mcp.digitalRead(midiPins[i]) == LOW);
+    bool channelState = (mcpMIDI.digitalRead(midiPins[i]) == LOW);
     drumMIDIenabled[i] = channelState;
     if (channelState) {
         newDrumState |= (1 << i);
