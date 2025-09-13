@@ -6,7 +6,8 @@ enum MenuState {
     MAIN_MENU,
     MENU_1,
     MENU_2,
-    NOTE_JITTER_PROB_MENU
+    NOTE_JITTER_PROB_MENU,
+    RETRIGGER_PROB_MENU
 };
 
 
@@ -33,8 +34,9 @@ public:
     void render();
     void handleInput(MenuButton btn);
     void handleJitterKeypad(char key); // For NOTE_JITTER_PROB_MENU
+    void handleRetriggerKeypad(char key); // For RETRIGGER_PROB_MENU
     MenuState currentMenu;
-private:
+public:
     Adafruit_ST7789& tft;
     // Main menu selection
     int mainMenuSelectedIdx = 0;
@@ -51,5 +53,7 @@ private:
     // Note Jitter Prob menu
     String jitterInputBuffer = "";
     int noteJitterProb = 0;
+    String retriggerInputBuffer = "";
+    int retriggerProb = 10;
     // No selection index needed; only '...' is selectable
 };

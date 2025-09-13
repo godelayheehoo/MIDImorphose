@@ -13,12 +13,20 @@ void MenuManager::handleInput(MenuButton btn) {
         // Up/down do nothing
         return;
     }
+    // Retrigger menu: only '...' is selectable, select returns to main menu
+    if (currentMenu == RETRIGGER_PROB_MENU) {
+        if (btn == BUTTON_SELECT) {
+            currentMenu = MAIN_MENU;
+        }
+        // Up/down do nothing
+        return;
+    }
     switch (currentMenu) {
         case MAIN_MENU:
             if (btn == BUTTON_UP) {
                 if (mainMenuSelectedIdx > 0) mainMenuSelectedIdx--;
             } else if (btn == BUTTON_DOWN) {
-                if (mainMenuSelectedIdx < 2) mainMenuSelectedIdx++; // 3 items: Menu 1, Menu 2, Note Jitter Prob
+                if (mainMenuSelectedIdx < 3) mainMenuSelectedIdx++; // 4 items: Menu 1, Menu 2, Note Jitter Prob, Retrigger Prob
             } else if (btn == BUTTON_SELECT) {
                 if (mainMenuSelectedIdx == 0) {
                     currentMenu = MENU_1;
@@ -31,6 +39,9 @@ void MenuManager::handleInput(MenuButton btn) {
                 } else if (mainMenuSelectedIdx == 2) {
                     currentMenu = NOTE_JITTER_PROB_MENU;
                     jitterInputBuffer = "";
+                } else if (mainMenuSelectedIdx == 3) {
+                    currentMenu = RETRIGGER_PROB_MENU;
+                    retriggerInputBuffer = "";
                 }
             }
             break;
@@ -108,17 +119,38 @@ void MenuManager::handleJitterKeypad(char key) {
     // Ignore other keys
 }
 
+// Call this from loop() when in RETRIGGER_PROB_MENU
+void MenuManager::handleRetriggerKeypad(char key) {
+    if (currentMenu != RETRIGGER_PROB_MENU) return;
+    static bool inputLocked = false;
+    if (key == '*') {
+        retriggerInputBuffer = "";
+        inputLocked = false;
+    } else if (key == '#') {
+        int val = retriggerInputBuffer.toInt();
+        if (val > 100) val = 100;
+        retriggerProb = val;
+        retriggerInputBuffer = String(val); // Show clamped value
+        inputLocked = true;
+    } else if (key >= '0' && key <= '9') {
+        if (!inputLocked && retriggerInputBuffer.length() < 3) {
+            retriggerInputBuffer += key;
+        }
+    }
+    // Ignore other keys
+}
+
 void MenuManager::render() {
     if (currentMenu == MAIN_MENU) {
         // Main menu: list of menus
-        const char* menus[3] = {"Menu 1", "Menu 2", "Note Jitter Prob"};
+        const char* menus[4] = {"Menu 1", "Menu 2", "Note Jitter Prob", "Retrigger Prob"};
         int yStart = 10;
         tft.setTextSize(2);
         tft.setCursor(10, yStart);
         tft.setTextColor(ST77XX_WHITE);
         tft.fillScreen(ST77XX_BLACK);
         tft.print("Main Menu");
-        for (int i = 0; i < 3; ++i) {
+        for (int i = 0; i < 4; ++i) {
             tft.setCursor(20, yStart + (i + 1) * 30);
             if (mainMenuSelectedIdx == i) {
                 tft.setTextColor(ST77XX_BLACK, ST77XX_WHITE);
@@ -216,6 +248,35 @@ void MenuManager::render() {
         tft.setTextColor(ST77XX_CYAN, ST77XX_BLACK);
         if (jitterInputBuffer.length() > 0) {
             tft.print(jitterInputBuffer);
+        } else {
+            tft.print("0");
+        }
+
+        // Instructions at bottom
+        tft.setTextSize(1);
+        tft.setTextColor(ST77XX_YELLOW);
+        tft.setCursor(10, 120);
+        tft.print("press # when done, press * to restart");
+    } else if (currentMenu == RETRIGGER_PROB_MENU) {
+        tft.fillScreen(ST77XX_BLACK);
+        // Title at top
+        tft.setTextSize(2);
+        tft.setTextColor(ST77XX_WHITE);
+        tft.setCursor(10, 10);
+        tft.print("retrigger prob");
+
+        // '...' at top, always highlighted
+        tft.setTextSize(2);
+        tft.setCursor(10, 40);
+        tft.setTextColor(ST77XX_BLACK, ST77XX_WHITE);
+        tft.print("...");
+
+        // Number in middle, always cyan
+        tft.setTextSize(3);
+        tft.setCursor(40, 80);
+        tft.setTextColor(ST77XX_CYAN, ST77XX_BLACK);
+        if (retriggerInputBuffer.length() > 0) {
+            tft.print(retriggerInputBuffer);
         } else {
             tft.print("0");
         }

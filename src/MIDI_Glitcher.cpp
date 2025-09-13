@@ -374,10 +374,8 @@ const OffsetSet* currentOffsetSet = &NO_SET;
 
 // const byte DRUM_NUMBERS[] = {};
 
-const byte NOTE_NUMBER_JITTER_PROB = 2; //this is out of 100.  Tie this to a menu feature later I think. This should be kept pretty low usually
 const byte JITTER_BUFFER_SIZE = 64;
 
-const byte RETRIGGER_PROB = 10; 
 const byte RERETRIGGER_PROB = 50;
 const byte RETRIGGER_BUFFER_SIZE = 32;
 // const byte RETRIGGER_TIME = 50; // could do min/max if we wanted to. This is the delay time between ntoes
@@ -956,9 +954,7 @@ Serial.println(F("Drawing SD matrix again (why?)"));
 
 void loop() {
   //debug, just flash colors on menu for now -- will need to add timing if you want to use this. 
-  // menuTft.fillScreen(ST77XX_RED);
-  // menuTft.fillScreen(ST77XX_GREEN);
-  // menuTft.fillScreen(ST77XX_BLUE);
+
 
   //debug
     // --- Poll keypad every 50ms ---
@@ -969,12 +965,22 @@ void loop() {
   }
   //end debug
 
-  // Handle keypad input for Note Jitter Prob menu
-  if (menu.currentMenu == NOTE_JITTER_PROB_MENU) {
-    if (keypad.lastKeyPressed) {
-      menu.handleJitterKeypad(keypad.lastKeyPressed);
-      menu.render();
-      keypad.lastKeyPressed = 0;
+  // Handle keypad input for menus using a switch statement
+  if (keypad.lastKeyPressed) {
+    switch (menu.currentMenu) {
+      case NOTE_JITTER_PROB_MENU:
+        menu.handleJitterKeypad(keypad.lastKeyPressed);
+        menu.render();
+        keypad.lastKeyPressed = 0;
+        break;
+      case RETRIGGER_PROB_MENU:
+        menu.handleRetriggerKeypad(keypad.lastKeyPressed);
+        menu.render();
+        keypad.lastKeyPressed = 0;
+        break;
+      // Add more cases for future menus here
+      default:
+        break;
     }
   }
 
@@ -1280,7 +1286,7 @@ else{
 
               if(retriggerOn){
               //retrigger cue logic -- works on both synth and drum currently
-              if(randomProbResult(RETRIGGER_PROB)){
+              if(randomProbResult(menu.retriggerProb)){
                   // Serial.println("Cued a retrigger note");
                   cueRetriggeredNote(newEvent);
               }
@@ -1781,7 +1787,7 @@ MidiEvent maybeNoteNumberJitter(MidiEvent event) {
     //only jitter NoteOn events
     if(event.type==midi::NoteOn){
     // roll a die
-    if (randomProbResult(NOTE_NUMBER_JITTER_PROB)) {
+  if (randomProbResult(menu.noteJitterProb)) {
         Serial.print(F("jittering note on channel "));
         Serial.println(event.channel);
         byte jitter = pickRandomElement(currentOffsetSet->offsets, currentOffsetSet->size);
@@ -1942,6 +1948,7 @@ void setupDisplay() {
   display.setTextColor(SSD1306_WHITE);
 }
 
+//not currently used. No real memory-related display problems with the teensy.
 void recoverDisplay() {
     // display.clearDisplay();
     // display.display();       // push a blank screen
