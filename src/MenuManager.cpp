@@ -5,6 +5,14 @@ MenuManager::MenuManager(Adafruit_ST7789& display) : tft(display), currentMenu(M
 
 
 void MenuManager::handleInput(MenuButton btn) {
+    // Jitter menu: only '...' is selectable, select returns to main menu
+    if (currentMenu == NOTE_JITTER_PROB_MENU) {
+        if (btn == BUTTON_SELECT) {
+            currentMenu = MAIN_MENU;
+        }
+        // Up/down do nothing
+        return;
+    }
     switch (currentMenu) {
         case MAIN_MENU:
             if (btn == BUTTON_UP) {
@@ -196,10 +204,16 @@ void MenuManager::render() {
         tft.setCursor(10, 10);
         tft.print("note jitter prob");
 
-        // Value in middle
+        // '...' at top, always highlighted
+        tft.setTextSize(2);
+        tft.setCursor(10, 40);
+        tft.setTextColor(ST77XX_BLACK, ST77XX_WHITE);
+        tft.print("...");
+
+        // Number in middle, always cyan
         tft.setTextSize(3);
-        tft.setTextColor(ST77XX_CYAN);
-        tft.setCursor(40, 60);
+        tft.setCursor(40, 80);
+        tft.setTextColor(ST77XX_CYAN, ST77XX_BLACK);
         if (jitterInputBuffer.length() > 0) {
             tft.print(jitterInputBuffer);
         } else {

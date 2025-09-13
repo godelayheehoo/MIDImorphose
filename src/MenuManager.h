@@ -51,4 +51,5 @@ private:
     // Note Jitter Prob menu
     String jitterInputBuffer = "";
     int noteJitterProb = 0;
+    // No selection index needed; only '...' is selectable
 };
