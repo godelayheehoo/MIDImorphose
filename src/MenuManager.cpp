@@ -1,3 +1,4 @@
+
 #include "MenuManager.h"
 
 MenuManager::MenuManager(Adafruit_ST7789& display) : tft(display), currentMenu(MAIN_MENU) {}
@@ -9,7 +10,7 @@ void MenuManager::handleInput(MenuButton btn) {
             if (btn == BUTTON_UP) {
                 if (mainMenuSelectedIdx > 0) mainMenuSelectedIdx--;
             } else if (btn == BUTTON_DOWN) {
-                if (mainMenuSelectedIdx < MAIN_MENU_ITEMS - 1) mainMenuSelectedIdx++;
+                if (mainMenuSelectedIdx < 2) mainMenuSelectedIdx++; // 3 items: Menu 1, Menu 2, Note Jitter Prob
             } else if (btn == BUTTON_SELECT) {
                 if (mainMenuSelectedIdx == 0) {
                     currentMenu = MENU_1;
@@ -19,6 +20,9 @@ void MenuManager::handleInput(MenuButton btn) {
                     currentMenu = MENU_2;
                     menuBSelectedIdx = 0;
                     menuBScrollIdx = 0;
+                } else if (mainMenuSelectedIdx == 2) {
+                    currentMenu = NOTE_JITTER_PROB_MENU;
+                    jitterInputBuffer = "";
                 }
             }
             break;
@@ -75,19 +79,38 @@ void MenuManager::handleInput(MenuButton btn) {
     }
 }
 
+// Call this from loop() when in NOTE_JITTER_PROB_MENU
+void MenuManager::handleJitterKeypad(char key) {
+    if (currentMenu != NOTE_JITTER_PROB_MENU) return;
+    static bool inputLocked = false;
+    if (key == '*') {
+        jitterInputBuffer = "";
+        inputLocked = false;
+    } else if (key == '#') {
+        int val = jitterInputBuffer.toInt();
+        if (val > 100) val = 100;
+        noteJitterProb = val;
+        jitterInputBuffer = String(val); // Show clamped value
+        inputLocked = true;
+    } else if (key >= '0' && key <= '9') {
+        if (!inputLocked && jitterInputBuffer.length() < 3) {
+            jitterInputBuffer += key;
+        }
+    }
+    // Ignore other keys
+}
 
 void MenuManager::render() {
-    tft.fillScreen(ST77XX_BLACK);
-    tft.setTextSize(2);
     if (currentMenu == MAIN_MENU) {
         // Main menu: list of menus
-        const char* menus[MAIN_MENU_ITEMS] = {"Menu 1", "Menu 2"};
+        const char* menus[3] = {"Menu 1", "Menu 2", "Note Jitter Prob"};
         int yStart = 10;
         tft.setTextSize(2);
         tft.setCursor(10, yStart);
         tft.setTextColor(ST77XX_WHITE);
+        tft.fillScreen(ST77XX_BLACK);
         tft.print("Main Menu");
-        for (int i = 0; i < MAIN_MENU_ITEMS; ++i) {
+        for (int i = 0; i < 3; ++i) {
             tft.setCursor(20, yStart + (i + 1) * 30);
             if (mainMenuSelectedIdx == i) {
                 tft.setTextColor(ST77XX_BLACK, ST77XX_WHITE);
@@ -103,13 +126,13 @@ void MenuManager::render() {
         int yStart = 10;
         int itemIdx = menu1ScrollIdx;
         int y = yStart;
+        tft.fillScreen(ST77XX_BLACK);
         for (int visible = 0; visible < MENU1_VISIBLE_OPTIONS && itemIdx < MENU1_TOTAL_ITEMS; ++visible, ++itemIdx) {
             int squareX = 10;
             int squareY = y + 6;
             int squareSize = 12;
             if (itemIdx != 0) {
                 if (itemIdx == menu1ActiveIdx) {
-                    
                     tft.fillRect(squareX, squareY, squareSize, squareSize, ST77XX_MAGENTA);
                 } else {
                     tft.drawRect(squareX, squareY, squareSize, squareSize, ST77XX_WHITE);
@@ -137,13 +160,13 @@ void MenuManager::render() {
         int yStart = 10;
         int itemIdx = menuBScrollIdx;
         int y = yStart;
+        tft.fillScreen(ST77XX_BLACK);
         for (int visible = 0; visible < MENUB_VISIBLE_OPTIONS && itemIdx < MENUB_TOTAL_ITEMS; ++visible, ++itemIdx) {
             int squareX = 10;
             int squareY = y + 6;
             int squareSize = 12;
             if (itemIdx != 0) {
                 if (itemIdx == menuBActiveIdx) {
-                    
                     tft.fillRect(squareX, squareY, squareSize, squareSize, ST77XX_MAGENTA);
                 } else {
                     tft.drawRect(squareX, squareY, squareSize, squareSize, ST77XX_WHITE);
@@ -165,5 +188,28 @@ void MenuManager::render() {
         }
         tft.setTextColor(ST77XX_WHITE);
         tft.setTextSize(2);
+    } else if (currentMenu == NOTE_JITTER_PROB_MENU) {
+        tft.fillScreen(ST77XX_BLACK);
+        // Title at top
+        tft.setTextSize(2);
+        tft.setTextColor(ST77XX_WHITE);
+        tft.setCursor(10, 10);
+        tft.print("note jitter prob");
+
+        // Value in middle
+        tft.setTextSize(3);
+        tft.setTextColor(ST77XX_CYAN);
+        tft.setCursor(40, 60);
+        if (jitterInputBuffer.length() > 0) {
+            tft.print(jitterInputBuffer);
+        } else {
+            tft.print("0");
+        }
+
+        // Instructions at bottom
+        tft.setTextSize(1);
+        tft.setTextColor(ST77XX_YELLOW);
+        tft.setCursor(10, 120);
+        tft.print("press # when done, press * to restart");
     }
 }

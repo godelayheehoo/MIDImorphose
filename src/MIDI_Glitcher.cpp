@@ -291,7 +291,9 @@ struct MatrixKeypad {
     }
   }
 
+  char lastKeyPressed = 0;
   void onPress(uint8_t, uint8_t, char key) {
+    lastKeyPressed = key;
     Serial.print("Pressed: ");
     Serial.println(key);
   }
@@ -966,6 +968,15 @@ void loop() {
     lastKeypadUpdate = millis();
   }
   //end debug
+
+  // Handle keypad input for Note Jitter Prob menu
+  if (menu.currentMenu == NOTE_JITTER_PROB_MENU) {
+    if (keypad.lastKeyPressed) {
+      menu.handleJitterKeypad(keypad.lastKeyPressed);
+      menu.render();
+      keypad.lastKeyPressed = 0;
+    }
+  }
 
   //debug -- test menu buttons
   if(menuDownButton.update()){

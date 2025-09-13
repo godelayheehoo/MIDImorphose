@@ -5,7 +5,8 @@
 enum MenuState {
     MAIN_MENU,
     MENU_1,
-    MENU_2
+    MENU_2,
+    NOTE_JITTER_PROB_MENU
 };
 
 
@@ -31,9 +32,10 @@ public:
     MenuManager(Adafruit_ST7789& display);
     void render();
     void handleInput(MenuButton btn);
+    void handleJitterKeypad(char key); // For NOTE_JITTER_PROB_MENU
+    MenuState currentMenu;
 private:
     Adafruit_ST7789& tft;
-    MenuState currentMenu;
     // Main menu selection
     int mainMenuSelectedIdx = 0;
     // Menu 1 selection
@@ -46,4 +48,7 @@ private:
     int menuBScrollIdx = 0;
     static const int MENUB_VISIBLE_OPTIONS = 4;
     int menuBActiveIdx = 1; // Active option, initially Option A (index 1)
+    // Note Jitter Prob menu
+    String jitterInputBuffer = "";
+    int noteJitterProb = 0;
 };
