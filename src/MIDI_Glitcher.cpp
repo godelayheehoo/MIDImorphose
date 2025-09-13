@@ -123,7 +123,124 @@ Adafruit_ST7789 menuTft = Adafruit_ST7789(&SPI1, TFT_CS, TFT_DC, TFT_RST);
 //     BUTTON_SELECT
 // };
 
-//controls interaction stuf
+
+
+//controls interaction stuff
+//button helper -- not currently used for most buttons
+struct ButtonHelper{
+  
+  int pinNumber;
+  bool buttonState = false;
+  bool lastButtonState = false;
+  bool justPressed = false;
+
+  bool update()//returns edge
+  {
+  lastButtonState = buttonState;
+  buttonState = digitalRead(pinNumber) == HIGH;
+  // Return true only if button was just pressed
+  justPressed = (buttonState && !lastButtonState);
+  return justPressed;
+  }
+
+  bool isPressed()
+  {
+    return buttonState;
+  }
+
+
+  //setup helper with given pin
+ void setup(int pin, int mode = INPUT_PULLUP)
+{
+    pinNumber = pin;
+    pinMode(pinNumber, mode);             // use passed mode or default
+    buttonState = digitalRead(pinNumber) == HIGH;
+    lastButtonState = buttonState;
+}
+
+};
+
+struct SwitchHelper{
+  int pinNumber;
+  bool switchState = false;
+  bool lastSwitchState = false;
+  bool justChanged = false;
+
+  bool update()//returns edge
+  {
+  lastSwitchState = switchState;
+  switchState = digitalRead(pinNumber) == LOW;
+  // Return true only if switch was just changed
+  justChanged = (switchState != lastSwitchState);
+  return justChanged;
+  }
+
+  bool isOn()
+  {
+    return switchState;
+  }
+
+  void setup(int pin)
+  {
+    pinNumber = pin;
+    pinMode(pinNumber, INPUT_PULLUP);
+    switchState = digitalRead(pinNumber) == HIGH;
+    lastSwitchState = switchState;
+  }
+  
+
+};
+
+struct McpButtonHelper{
+  Adafruit_MCP23X17* mcp;
+  int pinNumber;
+  bool buttonState = false;
+  bool lastButtonState = false;
+  bool justPressed = false;
+
+  bool update()//returns edge
+  {
+  lastButtonState = buttonState;
+  buttonState = mcp->digitalRead(pinNumber) == HIGH;
+  // Return true only if button was just pressed
+  justPressed = (buttonState && !lastButtonState);
+  return justPressed;
+  }
+
+  bool isPressed()
+  {
+    return buttonState;
+  }
+
+
+  //setup helper with given pin
+ void setup(int pin, Adafruit_MCP23X17* mcpInstance, int mode = INPUT_PULLUP)
+{
+    pinNumber = pin;
+    Serial.print("Setting up MCP button on pin ");
+    Serial.println(pinNumber);
+    mcp = mcpInstance;
+    mcp->pinMode(pinNumber, mode);
+    mcp->digitalWrite(pinNumber, HIGH);
+    buttonState = mcp->digitalRead(pinNumber) == HIGH;
+    lastButtonState = buttonState;
+}
+
+};
+
+
+//Control pad
+const byte menuRightPin = 0;
+const byte menuLeftPin = 1;
+const byte menuUpPin = 2;
+const byte menuDownPin = 3;
+const byte menuSelectPin = 4;
+
+McpButtonHelper menuRightButton;
+McpButtonHelper menuLeftButton;
+McpButtonHelper menuUpButton;
+McpButtonHelper menuDownButton;
+McpButtonHelper menuSelectButton;
 
 // -----------------
 // KEYPAD
@@ -208,77 +325,7 @@ MatrixKeypad keypad;
 #include "Tempo_Tracker.h"
 TempoTracker tempoTracker;
 
-//button helper -- not currently used for most buttons
-struct ButtonHelper{
-  int pinNumber;
-  bool buttonState = false;
-  bool lastButtonState = false;
-  bool justPressed = false;
 
-  bool update()//returns edge
-  {
-  lastButtonState = buttonState;
-  buttonState = digitalRead(pinNumber) == HIGH;
-  // Return true only if button was just pressed
-  justPressed = (buttonState && !lastButtonState);
-  return justPressed;
-  }
-
-  bool isPressed()
-  {
-    return buttonState;
-  }
-
-  //constructor
-  // ButtonHelper(int pin)
-  // {
-  //   pinNumber = pin;
-  //   pinMode(pinNumber, INPUT_PULLUP);
-  //   buttonState = digitalRead(pinNumber) == LOW;
-  //   lastButtonState = buttonState;
-  // }
-
-  //setup helper with given pin
- void setup(int pin, int mode = INPUT_PULLUP)
-{
-    pinNumber = pin;
-    pinMode(pinNumber, mode);             // use passed mode or default
-    buttonState = digitalRead(pinNumber) == HIGH;
-    lastButtonState = buttonState;
-}
-
-};
-
-struct SwitchHelper{
-  int pinNumber;
-  bool switchState = false;
-  bool lastSwitchState = false;
-  bool justChanged = false;
-
-  bool update()//returns edge
-  {
-  lastSwitchState = switchState;
-  switchState = digitalRead(pinNumber) == LOW;
-  // Return true only if switch was just changed
-  justChanged = (switchState != lastSwitchState);
-  return justChanged;
-  }
-
-  bool isOn()
-  {
-    return switchState;
-  }
-
-  void setup(int pin)
-  {
-    pinNumber = pin;
-    pinMode(pinNumber, INPUT_PULLUP);
-    switchState = digitalRead(pinNumber) == HIGH;
-    lastSwitchState = switchState;
-  }
-  
-
-};
 //buttons using helper
 // ButtonHelper playButton;
 // const int playPin = 13;
@@ -745,15 +792,6 @@ byte randomOctave() {
   return 0;                        // 0–59 → 60%
 }
 
-// MenuButton getLastButtonPressed() {
-//     if (digitalRead(UP_PIN) == LOW) return BUTTON_UP;
-//     if (digitalReadDOWN_PIN) == LOW) return BUTTON_DOWN;
-//     if (digitalReadLEFT_PIN) == LOW) return BUTTON_LEFT;
-//     if (digitalReadRIGHT_PIN) == LOW) return BUTTON_RIGHT;
-//     if (digitalReadSELECT_PIN) == LOW) return BUTTON_SELECT;
-//     return BUTTON_NONE;
-// }
-
 //function prototypes
 void playSavedPulses();
 
@@ -846,6 +884,7 @@ void setup() {
   retriggerSwitch.setup(retriggerSwitchPin);
   synthJitterSwitch.setup(synthJitterSwitchPin);
 
+  Serial.println("Turning on buffer LED pin");
   digitalWrite(bufferLedPin, HIGH);
   delay(100);
 
@@ -892,6 +931,14 @@ Serial.println(F("Drawing SD matrix again (why?)"));
   Serial.println("setting up keyboard");
   keypad.begin(ROW_PINS, COL_PINS);
 
+  Serial.println("Setting up menu buttons");
+  menuRightButton.setup(menuRightPin, &mcpControls);
+  menuLeftButton.setup(menuLeftPin, &mcpControls);
+  menuUpButton.setup(menuUpPin, &mcpControls);
+  menuDownButton.setup(menuDownPin, &mcpControls);
+  menuSelectButton.setup(menuSelectPin, &mcpControls);
+  Serial.println("Menu buttons set up");
+
   
   Serial.println(F("Ending setup"));
 }
@@ -909,6 +956,25 @@ void loop() {
     keypad.update();
     lastKeypadUpdate = millis();
   }
+  //end debug
+
+  //debug -- test menu buttons
+  if(menuDownButton.update()){
+    Serial.println(F("Menu Down button pressed"));
+  }
+  if(menuUpButton.update()){
+    Serial.println(F("Menu Up button pressed"));
+  }
+  if(menuLeftButton.update()){
+    Serial.println(F("Menu Left button pressed"));
+  }
+  if(menuRightButton.update()){
+    Serial.println(F("Menu Right button pressed"));
+  }
+  if(menuSelectButton.update()){
+    Serial.println(F("Menu Select button pressed"));
+  }
+  //end debug
 
   //////Button & switch reads
   if(retriggerSwitch.update()){
