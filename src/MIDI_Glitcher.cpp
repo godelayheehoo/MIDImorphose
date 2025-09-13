@@ -116,15 +116,7 @@ const unsigned long TEMP_DISPLAY_TIME = 2000;  // milliseconds
 //menu setup
 // SPI1 hardware peripheral
 Adafruit_ST7789 menuTft = Adafruit_ST7789(&SPI1, TFT_CS, TFT_DC, TFT_RST);
-// MenuManager menu(menuTft);
-// enum MenuButton {
-//     BUTTON_NONE,
-//     BUTTON_UP,
-//     BUTTON_DOWN,
-//     BUTTON_LEFT,
-//     BUTTON_RIGHT,
-//     BUTTON_SELECT
-// };
+MenuManager menu(menuTft);
 
 
 
@@ -795,14 +787,6 @@ byte randomOctave() {
   return 0;                        // 0–59 → 60%
 }
 
-// MenuButton getLastButtonPressed() {
-//     if (digitalRead(UP_PIN) == LOW) return BUTTON_UP;
-//     if (digitalReadDOWN_PIN) == LOW) return BUTTON_DOWN;
-//     if (digitalReadLEFT_PIN) == LOW) return BUTTON_LEFT;
-//     if (digitalReadRIGHT_PIN) == LOW) return BUTTON_RIGHT;
-//     if (digitalReadSELECT_PIN) == LOW) return BUTTON_SELECT;
-//     return BUTTON_NONE;
-// }
 
 //function prototypes
 void playSavedPulses();
@@ -951,7 +935,9 @@ Serial.println(F("Drawing SD matrix again (why?)"));
   menuSelectButton.setup(menuSelectPin, &mcpControls);
   Serial.println("Menu buttons set up");
 
-  
+  Serial.println("Rendering menu");
+  menu.render();
+  Serial.println("Menu rendered");
   Serial.println(F("Ending setup"));
 }
 
@@ -972,19 +958,31 @@ void loop() {
 
   //debug -- test menu buttons
   if(menuDownButton.update()){
+    menu.handleInput(BUTTON_DOWN);
+    menu.render();
     Serial.println(F("Menu Down button pressed"));
   }
   if(menuUpButton.update()){
+    menu.handleInput(BUTTON_UP);
+    menu.render();
     Serial.println(F("Menu Up button pressed"));
   }
   if(menuLeftButton.update()){
+    menu.handleInput(BUTTON_LEFT);
+    menu.render();
     Serial.println(F("Menu Left button pressed"));
   }
   if(menuRightButton.update()){
+    menu.handleInput(BUTTON_RIGHT);
+    menu.render();
     Serial.println(F("Menu Right button pressed"));
   }
+
   if(menuSelectButton.update()){
+    menu.handleInput(BUTTON_SELECT);
+    menu.render();
     Serial.println(F("Menu Select button pressed"));
+
   }
   //end debug
 
