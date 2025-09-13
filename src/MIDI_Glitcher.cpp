@@ -833,7 +833,9 @@ MidiEvent maybeNoteNumberJitter(MidiEvent event);
 MidiEvent maybePercolateNote(MidiEvent event, byte index_number);
 
 
-// void processMessage(const ParsedMessage &msg);
+// Add these global flags near the top of your file
+bool pendingDrumChannelUpdate = false;
+bool pendingSynthChannelUpdate = false;
 
 void setup() {
   // put your setup code here, to run once:
@@ -1041,20 +1043,21 @@ void loop() {
 
   stutterButtonPressed = readStutterButton();
   
-  //probably remove soon 
-  // panicButtonPressed = digitalRead(panicButtonPin) == HIGH;
+
 
 //trying making these low
-  drumMIDIButtonPressed = digitalRead(drumMIDIButtonPin)==HIGH;
-  synthMIDIButtonPressed = digitalRead(synthMIDIButtonPin)==HIGH;
+  // drumMIDIButtonPressed = digitalRead(drumMIDIButtonPin)==HIGH;
+  // synthMIDIButtonPressed = digitalRead(synthMIDIButtonPin)==HIGH;
 
-  if(drumMIDIButtonPressed&&!prevDrumMIDIButtonPressed){
+  if(pendingDrumChannelUpdate){
     Serial.println(F("Drum button pressed!"));
     updateDrumSwitches();
+    pendingDrumChannelUpdate=false;
   }
-  if(synthMIDIButtonPressed && !prevSynthMIDIButtonPressed){
+  if(pendingSynthChannelUpdate){
     Serial.println(F("Synth button pressed!"));
     updateSynthSwitches();
+    pendingSynthChannelUpdate=false;
   }
 
 // read switches and build new state
@@ -1636,7 +1639,6 @@ bool checkForNoteOn(byte noteOffNumber) {
   // note never appeared
   return false;
 }
-
 
 //BUFFER LED stuff
 void checkPulseBufferFullSetLED(){

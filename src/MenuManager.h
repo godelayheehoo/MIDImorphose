@@ -7,7 +7,8 @@ enum MenuState {
     MENU_1,
     MENU_2,
     NOTE_JITTER_PROB_MENU,
-    RETRIGGER_PROB_MENU
+    RETRIGGER_PROB_MENU,
+    CHANNEL_CONFIG_MENU
 };
 
 
@@ -40,6 +41,7 @@ public:
     Adafruit_ST7789& tft;
     // Main menu selection
     int mainMenuSelectedIdx = 0;
+    int channelConfigSelectedIdx = 0;
     int mainMenuScrollIdx = 0;
     static const int MAIN_MENU_VISIBLE_ITEMS = 3;
     // Menu 1 selection

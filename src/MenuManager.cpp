@@ -5,6 +5,28 @@ MenuManager::MenuManager(Adafruit_ST7789& display) : tft(display), currentMenu(M
 
 
 void MenuManager::handleInput(MenuButton btn) {
+    // Channel config menu: select triggers pending update flags
+    extern bool pendingDrumChannelUpdate;
+    extern bool pendingSynthChannelUpdate;
+    if (currentMenu == CHANNEL_CONFIG_MENU) {
+        if (btn == BUTTON_UP) {
+            if (channelConfigSelectedIdx > 0) channelConfigSelectedIdx--;
+        } else if (btn == BUTTON_DOWN) {
+            if (channelConfigSelectedIdx < 2) channelConfigSelectedIdx++;
+        } else if (btn == BUTTON_SELECT) {
+            if (channelConfigSelectedIdx == 0) {
+                // '...' selected, return to main menu
+                currentMenu = MAIN_MENU;
+            } else if (channelConfigSelectedIdx == 1) {
+                pendingSynthChannelUpdate = true;
+                currentMenu = MAIN_MENU;
+            } else if (channelConfigSelectedIdx == 2) {
+                pendingDrumChannelUpdate = true;
+                currentMenu = MAIN_MENU;
+            }
+        }
+        return;
+    }
     // Jitter menu: only '...' is selectable, select returns to main menu
     if (currentMenu == NOTE_JITTER_PROB_MENU) {
         if (btn == BUTTON_SELECT) {
@@ -31,7 +53,7 @@ void MenuManager::handleInput(MenuButton btn) {
                     }
                 }
             } else if (btn == BUTTON_DOWN) {
-                if (mainMenuSelectedIdx < 3) {
+                if (mainMenuSelectedIdx < 4) {
                     mainMenuSelectedIdx++;
                     if (mainMenuSelectedIdx > mainMenuScrollIdx + MAIN_MENU_VISIBLE_ITEMS - 1) {
                         mainMenuScrollIdx = mainMenuSelectedIdx - MAIN_MENU_VISIBLE_ITEMS + 1;
@@ -52,6 +74,9 @@ void MenuManager::handleInput(MenuButton btn) {
                 } else if (mainMenuSelectedIdx == 3) {
                     currentMenu = RETRIGGER_PROB_MENU;
                     retriggerInputBuffer = "";
+                } else if (mainMenuSelectedIdx == 4) {
+                    currentMenu = CHANNEL_CONFIG_MENU;
+                    channelConfigSelectedIdx = 0;
                 }
             }
             break;
@@ -153,7 +178,7 @@ void MenuManager::handleRetriggerKeypad(char key) {
 void MenuManager::render() {
     if (currentMenu == MAIN_MENU) {
         // Main menu: list of menus
-        const char* menus[4] = {"Menu 1", "Menu 2", "Note Jitter Prob", "Retrigger Prob"};
+        const char* menus[5] = {"Menu 1", "Menu 2", "Note Jitter Prob", "Retrigger Prob", "Channel Config"};
         int yStart = 10;
         tft.setTextSize(2);
         tft.setCursor(10, yStart);
@@ -162,7 +187,7 @@ void MenuManager::render() {
         tft.print("Main Menu");
         int itemIdx = mainMenuScrollIdx;
         int y = yStart;
-        for (int visible = 0; visible < MAIN_MENU_VISIBLE_ITEMS && itemIdx < 4; ++visible, ++itemIdx) {
+        for (int visible = 0; visible < MAIN_MENU_VISIBLE_ITEMS && itemIdx < 5; ++visible, ++itemIdx) {
             tft.setCursor(20, y + 30);
             if (mainMenuSelectedIdx == itemIdx) {
                 tft.setTextColor(ST77XX_BLACK, ST77XX_WHITE);
@@ -171,6 +196,24 @@ void MenuManager::render() {
             }
             tft.print(menus[itemIdx]);
             y += 30;
+        }
+        tft.setTextColor(ST77XX_WHITE);
+    } else if (currentMenu == CHANNEL_CONFIG_MENU) {
+        tft.fillScreen(ST77XX_BLACK);
+        tft.setTextSize(2);
+        tft.setTextColor(ST77XX_WHITE);
+        tft.setCursor(10, 10);
+        tft.print("Channel Config");
+        const char* options[3] = {"...", "set synth channels", "set drum channels"};
+        int y = 50;
+        for (int i = 0; i < 3; ++i) {
+            tft.setCursor(20, y + i * 30);
+            if (channelConfigSelectedIdx == i) {
+                tft.setTextColor(ST77XX_BLACK, ST77XX_WHITE);
+            } else {
+                tft.setTextColor(ST77XX_WHITE, ST77XX_BLACK);
+            }
+            tft.print(options[i]);
         }
         tft.setTextColor(ST77XX_WHITE);
     } else if (currentMenu == MENU_1) {
