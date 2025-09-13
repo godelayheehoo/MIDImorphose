@@ -24,9 +24,19 @@ void MenuManager::handleInput(MenuButton btn) {
     switch (currentMenu) {
         case MAIN_MENU:
             if (btn == BUTTON_UP) {
-                if (mainMenuSelectedIdx > 0) mainMenuSelectedIdx--;
+                if (mainMenuSelectedIdx > 0) {
+                    mainMenuSelectedIdx--;
+                    if (mainMenuSelectedIdx < mainMenuScrollIdx) {
+                        mainMenuScrollIdx = mainMenuSelectedIdx;
+                    }
+                }
             } else if (btn == BUTTON_DOWN) {
-                if (mainMenuSelectedIdx < 3) mainMenuSelectedIdx++; // 4 items: Menu 1, Menu 2, Note Jitter Prob, Retrigger Prob
+                if (mainMenuSelectedIdx < 3) {
+                    mainMenuSelectedIdx++;
+                    if (mainMenuSelectedIdx > mainMenuScrollIdx + MAIN_MENU_VISIBLE_ITEMS - 1) {
+                        mainMenuScrollIdx = mainMenuSelectedIdx - MAIN_MENU_VISIBLE_ITEMS + 1;
+                    }
+                }
             } else if (btn == BUTTON_SELECT) {
                 if (mainMenuSelectedIdx == 0) {
                     currentMenu = MENU_1;
@@ -150,14 +160,17 @@ void MenuManager::render() {
         tft.setTextColor(ST77XX_WHITE);
         tft.fillScreen(ST77XX_BLACK);
         tft.print("Main Menu");
-        for (int i = 0; i < 4; ++i) {
-            tft.setCursor(20, yStart + (i + 1) * 30);
-            if (mainMenuSelectedIdx == i) {
+        int itemIdx = mainMenuScrollIdx;
+        int y = yStart;
+        for (int visible = 0; visible < MAIN_MENU_VISIBLE_ITEMS && itemIdx < 4; ++visible, ++itemIdx) {
+            tft.setCursor(20, y + 30);
+            if (mainMenuSelectedIdx == itemIdx) {
                 tft.setTextColor(ST77XX_BLACK, ST77XX_WHITE);
             } else {
                 tft.setTextColor(ST77XX_WHITE, ST77XX_BLACK);
             }
-            tft.print(menus[i]);
+            tft.print(menus[itemIdx]);
+            y += 30;
         }
         tft.setTextColor(ST77XX_WHITE);
     } else if (currentMenu == MENU_1) {

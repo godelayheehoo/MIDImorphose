@@ -40,6 +40,8 @@ public:
     Adafruit_ST7789& tft;
     // Main menu selection
     int mainMenuSelectedIdx = 0;
+    int mainMenuScrollIdx = 0;
+    static const int MAIN_MENU_VISIBLE_ITEMS = 3;
     // Menu 1 selection
     int menu1SelectedIdx = 0; // 0 = '...', 1-4 = options
     int menu1ScrollIdx = 0; // index of first visible option (0 = '...', 1 = Option 1, ...)
