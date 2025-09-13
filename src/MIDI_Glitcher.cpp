@@ -70,6 +70,7 @@ channel to off and updating.  There's nuance here though-- the stuttered notes w
 //TODO: percolation needs note off handling added.  This is basically already solved in retrigger.
 //TODO: percolation seems to degenerate, like it gets stuck to a certain note.  Maybe it's not undoing its buffer or something. Maybe it *is* editing notes in place. 
 
+#include <EEPROM.h>
 
 #include <Arduino.h>
 #include <CircularBuffer.h>
@@ -632,7 +633,7 @@ const uint8_t midiPins[16] = {
 // Array to track which channels are ON
 
 //todo: switch this to the two arrays below and a check on those.
-// bool midiChannelActive[16];
+//these are stored in eeprom, so this only matters if EEPROM fails.
 bool drumMIDIenabled[16]  = {
   false, false, false, false,
   false, false, false, false,
@@ -862,8 +863,6 @@ void setup() {
   Serial.println(F("Entering setup display"));
   //display setup
   setupDisplay();
-  Serial.println(F("Drawing SD Matrix"));
-  drawSDMatrix(drumMIDIenabled, synthMIDIenabled);
   Serial.println(F("Setting pins"));
   pinMode(stutterButtonPin, INPUT); 
   // pinMode(panicButtonPin, INPUT_PULLUP);
@@ -899,9 +898,7 @@ void setup() {
       mcpMIDI.digitalWrite(midiPins[i], HIGH);
   }
 
-Serial.println(F("Drawing SD matrix again (why?)"));
-//setup OLED
-  drawSDMatrix(drumMIDIenabled, synthMIDIenabled); 
+
 //setup 7seg-- 0x0f is 15.
   seg7display.setBrightness(0x0f); 
 
@@ -939,7 +936,25 @@ Serial.println(F("Drawing SD matrix again (why?)"));
   menuSelectButton.setup(menuSelectPin, &mcpControls);
   Serial.println("Menu buttons set up");
 
+
+  //load EEPROM states
+  Serial.println("Loading EEPROM states");
+  uint16_t drumState = 0;
+  uint16_t synthState = 0;
+  EEPROM.get(0, drumState);
+  EEPROM.get(16, synthState);
+  Serial.println("EEPROM states loaded");
+
+  // Decode drumMIDIenabled and synthMIDIenabled arrays
+  for (int i = 0; i < 16; i++) {
+    drumMIDIenabled[i] = (drumState & (1 << i)) ? true : false;
+    synthMIDIenabled[i] = (synthState & (1 << i)) ? true : false;
+  }
   
+  Serial.println(F("Drawing SD matrix again (why?)"));
+//setup OLED
+  drawSDMatrix(drumMIDIenabled, synthMIDIenabled); 
+
   Serial.println(F("Ending setup"));
 }
 
@@ -1990,35 +2005,41 @@ void drawSDMatrix(bool drumArr[16], bool synthArr[16]) {
 void updateSynthSwitches(){
 newSynthState = 0;
 for (int i = 0; i < 16; i++) {
-    bool channelState = (mcpMIDI.digitalRead(midiPins[i]) == LOW);
-    synthMIDIenabled[i] = channelState;
-    if (channelState) {
-        newSynthState |= (1 << i);
-    } else {
-        newSynthState &= ~(1 << i);  // clear bit if switch is off
-    }
+  bool channelState = (mcpMIDI.digitalRead(midiPins[i]) == LOW);
+  synthMIDIenabled[i] = channelState;
+  if (channelState) {
+    newSynthState |= (1 << i);
+  } else {
+    newSynthState &= ~(1 << i);  // clear bit if switch is off
+  }
 }
-// if (newSynthState != oldSynthState) {
-    oldSynthState = newSynthState;
-    drawSDMatrix(drumMIDIenabled, synthMIDIenabled);  // you can update arrays too if needed
-// }
+if (newSynthState != oldSynthState) {
+  oldSynthState = newSynthState;
+  drawSDMatrix(drumMIDIenabled, synthMIDIenabled);  // you can update arrays too if needed
+  // Save newSynthState to EEPROM as uint16_t
+  EEPROM.put(16, newSynthState);
+  Serial.println("Wrote synth state to EEPROM");
+}
 }
 
 void updateDrumSwitches(){
 newDrumState = 0;
 for (int i = 0; i < 16; i++) {
-    bool channelState = (mcpMIDI.digitalRead(midiPins[i]) == LOW);
-    drumMIDIenabled[i] = channelState;
-    if (channelState) {
-        newDrumState |= (1 << i);
-    } else {
-        newDrumState &= ~(1 << i);  // clear bit if switch is off
-    }
+  bool channelState = (mcpMIDI.digitalRead(midiPins[i]) == LOW);
+  drumMIDIenabled[i] = channelState;
+  if (channelState) {
+    newDrumState |= (1 << i);
+  } else {
+    newDrumState &= ~(1 << i);  // clear bit if switch is off
+  }
 }
-// if (newDrumState != oldDrumState) {
-    oldDrumState = newDrumState;
-    drawSDMatrix(drumMIDIenabled, synthMIDIenabled);  // you can update arrays too if needed
-// }
+if (newDrumState != oldDrumState) {
+  oldDrumState = newDrumState;
+  drawSDMatrix(drumMIDIenabled, synthMIDIenabled);  // you can update arrays too if needed
+  // Save newDrumState to EEPROM as uint16_t
+  EEPROM.put(0, newDrumState);
+  Serial.println("Wrote drum state to EEPROM");
+}
 }
 
 
