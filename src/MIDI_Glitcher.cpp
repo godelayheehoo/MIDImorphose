@@ -917,12 +917,23 @@ Serial.println(F("Drawing SD matrix again (why?)"));
   menuTft.setRotation(3);   // landscape
   Serial.println("init screen");
 
-  // menuTft.fillScreen(ST77XX_WHITE);
+  menuTft.fillScreen(ST77XX_BLACK);
 
-  menuTft.setTextColor(ST77XX_BLACK);
+  menuTft.setTextColor(ST77XX_CYAN);
   menuTft.setCursor(10, 10);
   menuTft.setTextSize(2);
   menuTft.print(F("MIDI Glitcher"));
+  menuTft.setCursor(15,25);
+  menuTft.setTextColor(ST77XX_MAGENTA);
+  menuTft.print(F("MIDI Glitcher"));
+  menuTft.setCursor(20,40);
+  menuTft.setTextColor(ST77XX_YELLOW);
+  menuTft.print(F("MIDI Glitcher"));
+  //print "press select to start" in bottom right corner
+  menuTft.setCursor(135-24, 135-16);
+  menuTft.setTextColor(ST77XX_WHITE);
+  menuTft.setTextSize(1);
+  menuTft.print(F("Press Select to Start"));
 
   Serial.println("setting up keyboard");
   keypad.begin(ROW_PINS, COL_PINS);
@@ -935,9 +946,9 @@ Serial.println(F("Drawing SD matrix again (why?)"));
   menuSelectButton.setup(menuSelectPin, &mcpControls);
   Serial.println("Menu buttons set up");
 
-  Serial.println("Rendering menu");
-  menu.render();
-  Serial.println("Menu rendered");
+  // Serial.println("Rendering menu");
+  // menu.render();
+  // Serial.println("Menu rendered");
   Serial.println(F("Ending setup"));
 }
 
