@@ -1,3 +1,4 @@
+
 /*
   MIDI_repeater_midiClock_v7.ino
   Stutters (loops) midi on pressing button.  One bank of dipswitches controls active midi channels (treating drum and synth seperately, see below), 
@@ -89,7 +90,7 @@ MIDI_CREATE_INSTANCE(HardwareSerial, Serial8, MIDI);
 #define SCREEN_WIDTH 128
 #define SCREEN_HEIGHT 64
 #define OLED_RESET -1
-Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire2, OLED_RESET);
+Adafruit_SSD1306 statusDisplay(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire2, OLED_RESET);
 //- TM1637 (7-seg) screen
 #include <TM1637Display.h>
 #define CLK 7//pins definitions for TM1637 and can be changed to other ports       
@@ -136,6 +137,10 @@ struct ButtonHelper{
   buttonState = digitalRead(pinNumber) == HIGH;
   // Return true only if button was just pressed
   justPressed = (buttonState && !lastButtonState);
+  if(justPressed){
+    Serial.print("Pressed button on pin ");
+    Serial.println(pinNumber);
+  }
   return justPressed;
   }
 
@@ -768,12 +773,12 @@ void checkPulseBufferFullSetLED();
 void updateSynthSwitches();
 void updateDrumSwitches();
 
-void setupDisplay();
+void setupStatusDisplay();
 void drawSDMatrix(bool drumArr[16], bool synthArr[16]);
 void drawStretchDisplay();
 
-void recoverDisplay();
-bool safeDisplay();
+void recoverStatusDisplay();
+bool safeStatusDisplay();
 
 void cueRetriggeredNote(MidiEvent me);
 void playRetriggeredNotes();
@@ -785,6 +790,7 @@ bool checkForNoteOn(byte noteOffNumber);
 void startBufferFullBlink();
 void pruneBends();
 void showPanicDisplay();
+void drawStretchStatusDisplay();
 
 MidiEvent maybeNoteNumberJitter(MidiEvent event);
 MidiEvent maybePercolateNote(MidiEvent event, byte index_number);
@@ -814,12 +820,12 @@ void setup() {
   }
   Serial.println("MCP23017 on 0x25 initialized.");
 
-  Serial.println(F("Entering setup display"));
+  Serial.println(F("Entering setup status display"));
   //display setup
-  setupDisplay();
+  setupStatusDisplay();
   Serial.println(F("Setting pins"));
   pinMode(stutterButtonPin, INPUT); 
-  // pinMode(panicButtonPin, INPUT_PULLUP);
+ 
   panicButton.setup(panicButtonPin);
 
   pinMode(bufferLedPin, OUTPUT);
@@ -1020,7 +1026,12 @@ void loop() {
     lastTimeStretchPotUpdated = millis();
 
     
-    drawStretchDisplay();
+  drawStretchDisplay();
+  // Show stretch value on status display for TEMP_DISPLAY_TIME ms
+  tempViewCallback = drawStretchStatusDisplay;
+  tempViewStartTime = millis();
+  tempViewActive = true;
+  tempViewCallback();
 
 
    }
@@ -1813,34 +1824,34 @@ MidiEvent maybePercolateNote(MidiEvent event, byte index_number){
 
 //////Display functions
 
-void setupDisplay() {
-  if (!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) {
-    Serial.println(F("Setup display failed!"));
+void setupStatusDisplay() {
+  if (!statusDisplay.begin(SSD1306_SWITCHCAPVCC, 0x3C)) {
+    Serial.println(F("Setup statusdisplay failed!"));
     for (;;); // halt if OLED init fails
   }
-  display.clearDisplay();
-  display.setTextSize(1);
-  display.setTextColor(SSD1306_WHITE);
+  statusDisplay.clearDisplay();
+  statusDisplay.setTextSize(1);
+  statusDisplay.setTextColor(SSD1306_WHITE);
 }
 
 //not currently used. No real memory-related display problems with the teensy.
-void recoverDisplay() {
-    // display.clearDisplay();
-    // display.display();       // push a blank screen
-    // display.begin(SSD1306_SWITCHCAPVCC, 0x3C);  // full init
+void recoverStatusDisplay() {
+    // statusDisplay.clearDisplay();
+    // statusDisplay.display();       // push a blank screen
+    // statusDisplay.begin(SSD1306_SWITCHCAPVCC, 0x3C);  // full init
     // redrawDisplay();         // draw your current state
-    display.begin(SSD1306_SWITCHCAPVCC, 0x3C);  // full init first
-    display.clearDisplay();                     // then clear
+    statusDisplay.begin(SSD1306_SWITCHCAPVCC, 0x3C);  // full init first
+    statusDisplay.clearDisplay();                     // then clear
 }
 
 
 
 
 void drawSDMatrix(bool drumArr[16], bool synthArr[16]) {
-  display.clearDisplay();
-  display.setTextColor(SSD1306_WHITE);
-  display.setTextSize(1);
-  display.setCursor(0, 0); 
+  statusDisplay.clearDisplay();
+  statusDisplay.setTextColor(SSD1306_WHITE);
+  statusDisplay.setTextSize(1);
+  statusDisplay.setCursor(0, 0);
 
   int cols = 4;
   int rows = 4;
@@ -1850,13 +1861,13 @@ void drawSDMatrix(bool drumArr[16], bool synthArr[16]) {
   // draw vertical grid lines
   for (int c = 1; c < cols; c++) {
     int x = c * cellW;
-    display.drawLine(x, 0, x, SCREEN_HEIGHT, SSD1306_WHITE);
+    statusDisplay.drawLine(x, 0, x, SCREEN_HEIGHT, SSD1306_WHITE);
   }
 
   // draw horizontal grid lines
   for (int r = 1; r < rows; r++) {
     int y = r * cellH;
-    display.drawLine(0, y, SCREEN_WIDTH, y, SSD1306_WHITE);
+    statusDisplay.drawLine(0, y, SCREEN_WIDTH, y, SSD1306_WHITE);
   }
 
   // draw contents
@@ -1893,11 +1904,11 @@ void drawSDMatrix(bool drumArr[16], bool synthArr[16]) {
     int x = cellX + (cellW - textW) / 2;
     int y = cellY + (cellH - textH) / 2;
 
-    display.setCursor(x, y);
-    display.print(buf);
+    statusDisplay.setCursor(x, y);
+    statusDisplay.print(buf);
   }
 
-  display.display();
+  statusDisplay.display();
   // safeDisplayUpdate();
 }
 
@@ -1948,55 +1959,40 @@ void drawStretchDisplay(){
 
 void showPanicDisplay() {
     const char* panicMsg = "PANIC!";
-    display.clearDisplay();
-    display.setTextSize(2);
-    display.setTextColor(SSD1306_WHITE);
+    statusDisplay.clearDisplay();
+    statusDisplay.setTextSize(2);
+    statusDisplay.setTextColor(SSD1306_WHITE);
 
     int16_t x1, y1;
     uint16_t w, h;
-    display.getTextBounds(panicMsg, 0, 0, &x1, &y1, &w, &h);
+    statusDisplay.getTextBounds(panicMsg, 0, 0, &x1, &y1, &w, &h);
 
-    int x = (display.width() - w) / 2;
-    int y = (display.height() - h) / 2;
+    int x = (statusDisplay.width() - w) / 2;
+    int y = (statusDisplay.height() - h) / 2;
 
-    display.setCursor(x, y);
-    display.println(panicMsg);
-    display.display();
+    statusDisplay.setCursor(x, y);
+    statusDisplay.println(panicMsg);
+    statusDisplay.display();
 }
 
-//////////////// controls interaction (from external arduino) //////////////
 
-// void controlsReceiveEvent(int bytes) {
-//   while (Wire.available()) {
-//     char c = Wire.read();
-//     Serial.print(c);
-//   }
-// }
-
-// void controlsRequestEvent() {
-//   Wire.write("OK");  // respond to master if requested
-// }ctave_shift
-
-
-/////////comms////////////////
-// void processMessage(const ParsedMessage &msg) {
-//     switch (msg.type) {
-//         case MessageType::LOG_MSG:
-//             Serial.print("[NANO]: ");
-//             Serial.write(msg.payload, msg.length);
-//             Serial.println();
-//             break;
-
-//         case MessageType::OCTAVE_SHIFT:
-//             // msg.payload[0] contains the offset
-//             octaveShiftOption = msg.payload[0]; // example
-//             Serial.print("Got a octaveShiftOption#: ");
-//             Serial.println(octaveShiftOption);
-//             break;
-
-//         default:
-//             Serial.print("Unknown message type: ");
-//             Serial.println(static_cast<byte>(msg.type), HEX);
-//             break;
-//     }
-// }
+void drawStretchStatusDisplay() {
+  char stretchVal[8];
+  snprintf(stretchVal, sizeof(stretchVal), "%.2f", stretchValue);
+  statusDisplay.clearDisplay();
+  // Small text: 'stretch' top left
+  statusDisplay.setTextSize(1);
+  statusDisplay.setTextColor(1);
+  statusDisplay.setCursor(0, 0);
+  statusDisplay.print("stretch");
+  // Large text: value bottom right
+  statusDisplay.setTextSize(3);
+  int16_t x1, y1;
+  uint16_t w, h;
+  statusDisplay.getTextBounds(stretchVal, 0, 0, &x1, &y1, &w, &h);
+  int x = statusDisplay.width() - w - 2;
+  int y = statusDisplay.height() - h - 2;
+  statusDisplay.setCursor(x, y);
+  statusDisplay.print(stretchVal);
+  statusDisplay.display();
+}
