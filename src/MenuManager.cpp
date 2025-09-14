@@ -44,7 +44,8 @@ void MenuManager::handleInput(MenuButton btn) {
         return;
     }
     switch (currentMenu) {
-        case MAIN_MENU:
+        case MAIN_MENU: {
+            // Now 6 items: Menu 1, Menu 2, Note Jitter Prob, Retrigger Prob, Channel Config, Stutter Length
             if (btn == BUTTON_UP) {
                 if (mainMenuSelectedIdx > 0) {
                     mainMenuSelectedIdx--;
@@ -53,7 +54,7 @@ void MenuManager::handleInput(MenuButton btn) {
                     }
                 }
             } else if (btn == BUTTON_DOWN) {
-                if (mainMenuSelectedIdx < 4) {
+                if (mainMenuSelectedIdx < 5) {
                     mainMenuSelectedIdx++;
                     if (mainMenuSelectedIdx > mainMenuScrollIdx + MAIN_MENU_VISIBLE_ITEMS - 1) {
                         mainMenuScrollIdx = mainMenuSelectedIdx - MAIN_MENU_VISIBLE_ITEMS + 1;
@@ -77,9 +78,41 @@ void MenuManager::handleInput(MenuButton btn) {
                 } else if (mainMenuSelectedIdx == 4) {
                     currentMenu = CHANNEL_CONFIG_MENU;
                     channelConfigSelectedIdx = 0;
+                } else if (mainMenuSelectedIdx == 5) {
+                    currentMenu = STUTTER_LENGTH_MENU;
+                    stutterLengthSelectedIdx = 0;
+                    stutterLengthScrollIdx = 0;
                 }
             }
             break;
+        }
+        case STUTTER_LENGTH_MENU: {
+            // Only allow selection within visible options
+            if (btn == BUTTON_SELECT) {
+                if (stutterLengthSelectedIdx == 0) {
+                    currentMenu = MAIN_MENU;
+                } else {
+                    stutterLengthActiveIdx = stutterLengthSelectedIdx;
+                    pulseResolution = STUTTER_LENGTH_PULSE_RESOLUTIONS[stutterLengthSelectedIdx - 1];
+                }
+            } else if (btn == BUTTON_UP) {
+                if (stutterLengthSelectedIdx > stutterLengthScrollIdx) {
+                    stutterLengthSelectedIdx--;
+                } else if (stutterLengthScrollIdx > 0) {
+                    stutterLengthScrollIdx--;
+                    stutterLengthSelectedIdx = stutterLengthScrollIdx;
+                }
+            } else if (btn == BUTTON_DOWN) {
+                int lastVisibleIdx = stutterLengthScrollIdx + STUTTER_LENGTH_VISIBLE_OPTIONS - 1;
+                if (stutterLengthSelectedIdx < lastVisibleIdx && stutterLengthSelectedIdx < STUTTER_LENGTH_TOTAL_ITEMS - 1) {
+                    stutterLengthSelectedIdx++;
+                } else if (lastVisibleIdx < STUTTER_LENGTH_TOTAL_ITEMS - 1) {
+                    stutterLengthScrollIdx++;
+                    stutterLengthSelectedIdx = stutterLengthScrollIdx + STUTTER_LENGTH_VISIBLE_OPTIONS - 1;
+                }
+            }
+            break;
+        }
         case MENU_1:
             if (btn == BUTTON_SELECT) {
                 if (menu1SelectedIdx == 0) {
@@ -178,7 +211,7 @@ void MenuManager::handleRetriggerKeypad(char key) {
 void MenuManager::render() {
     if (currentMenu == MAIN_MENU) {
         // Main menu: list of menus
-        const char* menus[5] = {"Menu 1", "Menu 2", "Note Jitter Prob", "Retrigger Prob", "Channel Config"};
+        const char* menus[6] = {"Menu 1", "Menu 2", "Note Jitter Prob", "Retrigger Prob", "Channel Config", "Stutter Length"};
         int yStart = 10;
         tft.setTextSize(2);
         tft.setCursor(10, yStart);
@@ -187,7 +220,7 @@ void MenuManager::render() {
         tft.print("Main Menu");
         int itemIdx = mainMenuScrollIdx;
         int y = yStart;
-        for (int visible = 0; visible < MAIN_MENU_VISIBLE_ITEMS && itemIdx < 5; ++visible, ++itemIdx) {
+        for (int visible = 0; visible < MAIN_MENU_VISIBLE_ITEMS && itemIdx < 6; ++visible, ++itemIdx) {
             tft.setCursor(20, y + 30);
             if (mainMenuSelectedIdx == itemIdx) {
                 tft.setTextColor(ST77XX_BLACK, ST77XX_WHITE);
@@ -195,6 +228,41 @@ void MenuManager::render() {
                 tft.setTextColor(ST77XX_WHITE, ST77XX_BLACK);
             }
             tft.print(menus[itemIdx]);
+            y += 30;
+        }
+        tft.setTextColor(ST77XX_WHITE);
+    } else if (currentMenu == STUTTER_LENGTH_MENU) {
+        tft.fillScreen(ST77XX_BLACK);
+        tft.setTextSize(2);
+        tft.setTextColor(ST77XX_WHITE);
+        tft.setCursor(10, 10);
+        tft.print("stutter length");
+        int yStart = 50;
+        int itemIdx = stutterLengthScrollIdx;
+        int y = yStart;
+        for (int visible = 0; visible < STUTTER_LENGTH_VISIBLE_OPTIONS && itemIdx < STUTTER_LENGTH_TOTAL_ITEMS; ++visible, ++itemIdx) {
+            int squareX = 10;
+            int squareY = y + 6;
+            int squareSize = 12;
+            if (itemIdx != 0) {
+                if (itemIdx == stutterLengthActiveIdx) {
+                    tft.fillRect(squareX, squareY, squareSize, squareSize, ST77XX_MAGENTA);
+                } else {
+                    tft.drawRect(squareX, squareY, squareSize, squareSize, ST77XX_WHITE);
+                }
+            }
+            tft.setCursor(squareX + squareSize + 6, y);
+            if (stutterLengthSelectedIdx == itemIdx) {
+                tft.setTextColor(ST77XX_BLACK, ST77XX_WHITE);
+            } else {
+                tft.setTextColor(ST77XX_WHITE, ST77XX_BLACK);
+            }
+            tft.setTextSize(2);
+            if (itemIdx == 0) {
+                tft.print("...");
+            } else {
+                tft.print(STUTTER_LENGTH_LABELS[itemIdx - 1]);
+            }
             y += 30;
         }
         tft.setTextColor(ST77XX_WHITE);

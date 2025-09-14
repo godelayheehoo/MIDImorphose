@@ -118,6 +118,7 @@ const unsigned long TEMP_DISPLAY_TIME = 2000;  // milliseconds
 Adafruit_ST7789 menuTft = Adafruit_ST7789(&SPI1, TFT_CS, TFT_DC, TFT_RST);
 MenuManager menu(menuTft);
 
+byte oldPulseResolution;
 
 
 //controls interaction stuff
@@ -390,8 +391,7 @@ byte STUTTER_TEMPERATURE = 0; //this is used to randomly rearrange/resample note
 //this is currently NOT channel specific, which will be interesting. 
 
 //working pulse resolution size, we start with a quarter note (max pulses per stutter)
-unsigned int pulseResolution = MAX_PULSES_PER_STUTTER;
-unsigned int oldPulseResolution = pulseResolution;
+// Now set by menu.pulseResolution
 // --- LED Pins ---
 const int bufferLedPin = 9; 
 
@@ -552,11 +552,6 @@ bool stutterButtonPressed = false;
 bool prevStutterPressed = false;
 
 // --- Dipswitch states ---
-bool onesTempoPinUp;
-bool twosTempoPinUp;
-bool foursTempoPinUp;
-bool eightsTempoPinUp;
-byte tempoDipswitchVal;
 
 bool onesOffsetPinUp;
 bool twosOffsetPinUp;
@@ -856,10 +851,6 @@ void setup() {
   // pinMode(panicButtonPin, INPUT_PULLUP);
   panicButton.setup(panicButtonPin);
 
-  pinMode(onesTempoPin, INPUT_PULLUP);
-  pinMode(twosTempoPin, INPUT_PULLUP);
-  pinMode(foursTempoPin, INPUT_PULLUP);
-  pinMode(eightsTempoPin, INPUT_PULLUP);
   pinMode(onesOffsetPin, INPUT_PULLUP);
   pinMode(twosOffsetPin, INPUT_PULLUP);
   pinMode(foursOffsetPin, INPUT_PULLUP);
@@ -952,13 +943,16 @@ void setup() {
 //setup OLED
   drawSDMatrix(drumMIDIenabled, synthMIDIenabled); 
 
+  //get menu pulse resolution 
+  oldPulseResolution = menu.pulseResolution;
+
   Serial.println(F("Ending setup"));
 }
 
 void loop() {
   //debug, just flash colors on menu for now -- will need to add timing if you want to use this. 
-
-
+  
+  
   //debug
     // --- Poll keypad every 50ms ---
   static unsigned long lastKeypadUpdate = 0;
@@ -1065,29 +1059,7 @@ void loop() {
    }
   }
 
-  //tempo dipswitch
-  tempoDipswitchVal = readTempoDipswitch();
-
-  //get pulse resoution from tempoDipswitchVal
-// 24 MIDI clocks = 1 quarter note
-switch (tempoDipswitchVal) {
-  case  0: pulseResolution =  3;  break; // 1/32 note
-  case  1: pulseResolution =  4;  break; // 1/32 triplet
-  case  2: pulseResolution =  6;  break; // 1/16 note
-  case  3: pulseResolution =  8;  break; // 1/16 triplet
-  case  4: pulseResolution =  9;  break; // dotted 1/16 note
-  case  5: pulseResolution = 12;  break; // 1/8 note
-  case  6: pulseResolution = 15;  break; // 5/32 note (odd subdivision)
-  case  7: pulseResolution = 16;  break; // 1/8 triplet
-  case  8: pulseResolution = 18;  break; // dotted 1/8 note
-  case  9: pulseResolution = 24;  break; // 1/4 note
-  case 10: pulseResolution = 32;  break; // 1/4 triplet
-  case 11: pulseResolution = 36;  break; // dotted 1/4 note
-  case 12: pulseResolution = 48;  break; // 1/2 note
-  case 13: pulseResolution = 64;  break; // 1/2 triplet
-  case 14: pulseResolution = 72;  break; // dotted 1/2 note
-  case 15: pulseResolution = 96;  break; // whole note
-}
+ 
 
 
 updateOffsetSwitches();
@@ -1125,16 +1097,16 @@ if (panicButton.update()) {
   // }
 
   ///check if pulse resolution has changed and respond appropriately. If the new resolution is bigger, we have no problem. If it's smaller, we clear out the bad notes & start times.
-  if (pulseResolution < oldPulseResolution) {
+  if (menu.pulseResolution < oldPulseResolution) {
     //clear out extra notes
-    for (unsigned int i = 1; i < pulseResolution + 1; i++) {
+    for (unsigned int i = 1; i < menu.pulseResolution + 1; i++) {
       int removalIndex = (currentPulse + i) % oldPulseResolution;
       clearOldNotes(removalIndex);
     }
     // //clear out extra start times
     // Serial.print("On pulse#");
     // Serial.println(currentPulse);
-    for (unsigned int i = 0; i < oldPulseResolution - pulseResolution; i++) {
+    for (unsigned int i = 0; i < oldPulseResolution - menu.pulseResolution; i++) {
     //   Serial.print("Removing the");
     //   Serial.print(i);
     //   Serial.print("nth pulse, now have");
@@ -1314,7 +1286,7 @@ else{
     //if we don't have pulseResolution's worth of pulse, we don't do playback
   //I don't think I need this flag logic, I think I *can* just return out of here.  
   bool validLoopFlag = true;
-  if (pulseStartTimes.size() < pulseResolution) {
+  if (pulseStartTimes.size() < menu.pulseResolution) {
     Serial.println(F("Insufficient number of pulses!")); 
     validLoopFlag=false;
     isLooping=false;
@@ -1405,7 +1377,7 @@ if(logButton.update()){
 
   prevStutterPressed = stutterButtonPressed;
   prevLooping = isLooping;
-  oldPulseResolution = pulseResolution;
+  oldPulseResolution = menu.pulseResolution;
   
     
   if(PITCHBEND_ACTIVE){
@@ -1513,29 +1485,7 @@ bool readStutterButton() {
 }
 
 
-byte readTempoDipswitch() {
-  onesTempoPinUp = digitalRead(onesTempoPin) == LOW;
-  twosTempoPinUp = digitalRead(twosTempoPin) == LOW;
-  foursTempoPinUp = digitalRead(foursTempoPin) == LOW;
-  eightsTempoPinUp = digitalRead(eightsTempoPin) == LOW;
 
-  int val = 0;
-  if (onesTempoPinUp) {
-    val += 1;
-  }
-  if (twosTempoPinUp) {
-    val += 2;
-  }
-  if (foursTempoPinUp){
-    val += 4;
-  }
-  if(eightsTempoPinUp){
-    val += 8;
-  }
-
-
-  return val;
-}
 
 byte readOffsetDipswitch(){
   onesOffsetPinUp = digitalRead(onesOffsetPin) == LOW;
@@ -1595,12 +1545,12 @@ MidiEvent createEmptyEvent(byte pulseNumber) {
 
 
 void handleClock() {
-  currentPulse = (currentPulse + 1) % pulseResolution;
+  currentPulse = (currentPulse + 1) % menu.pulseResolution;
   // Serial.println(currentPulse);
   clearOldNotes(currentPulse);
   unsigned long pulseTime = millis();
   //once the buffer is full, remove the oldest
-  if(pulseStartTimes.size()>=pulseResolution){
+  if(pulseStartTimes.size()>=menu.pulseResolution){
   pulseStartTimes.pop(dummyTime);
   }
   //add the new pulse start time
@@ -1625,7 +1575,7 @@ bool checkForNoteOn(byte noteOffNumber) {
 //BUFFER LED stuff
 void checkPulseBufferFullSetLED(){
   if(isBlinking){return;}
-  if (pulseStartTimes.size() >= pulseResolution) {
+  if (pulseStartTimes.size() >= menu.pulseResolution) {
     digitalWrite(bufferLedPin, HIGH);
   }
   else{

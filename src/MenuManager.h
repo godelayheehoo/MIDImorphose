@@ -8,7 +8,17 @@ enum MenuState {
     MENU_2,
     NOTE_JITTER_PROB_MENU,
     RETRIGGER_PROB_MENU,
-    CHANNEL_CONFIG_MENU
+    CHANNEL_CONFIG_MENU,
+    STUTTER_LENGTH_MENU
+};
+// Stutter length menu options (pulse resolutions and labels)
+const int NUM_STUTTER_LENGTH_OPTIONS = 16;
+const int STUTTER_LENGTH_TOTAL_ITEMS = NUM_STUTTER_LENGTH_OPTIONS + 1; // 1 for '...', rest for options
+static const unsigned int STUTTER_LENGTH_PULSE_RESOLUTIONS[NUM_STUTTER_LENGTH_OPTIONS] = {
+    3, 4, 6, 8, 9, 12, 15, 16, 18, 24, 32, 36, 48, 64, 72, 96
+};
+static const char* STUTTER_LENGTH_LABELS[NUM_STUTTER_LENGTH_OPTIONS] = {
+    "1/32 note", "1/32 triplet", "1/16 note", "1/16 triplet", "dotted 1/16 note", "1/8 note", "5/32 note (odd)", "1/8 triplet", "dotted 1/8 note", "1/4 note", "1/4 triplet", "dotted 1/4 note", "1/2 note", "1/2 triplet", "dotted 1/2 note", "whole note"
 };
 
 
@@ -60,4 +70,11 @@ public:
     String retriggerInputBuffer = "";
     int retriggerProb = 10;
     // No selection index needed; only '...' is selectable
+    // Stutter Length menu selection
+    int stutterLengthSelectedIdx = 0; // 0 = '...', 1-16 = options
+    int stutterLengthScrollIdx = 0;
+    static const int STUTTER_LENGTH_VISIBLE_OPTIONS = 3;
+    int stutterLengthActiveIdx = 1; // Active option, initially Option 1 (index 1)
+    // Stutter length menu-held pulse resolution
+    unsigned int pulseResolution = STUTTER_LENGTH_PULSE_RESOLUTIONS[9]; // Default to 1/4 note (index 9)
 };

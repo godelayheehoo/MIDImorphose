@@ -13,7 +13,7 @@ MIDI Mangler V2 is a PlatformIO-based Arduino project for the ATmega2560 (Mega) 
 - **Timing Effects:** Dipswitches control timing resolution (from 1/32 to 1/2 notes).
 - **Note Jitter:** Enable/disable jitter using the dedicated switch. Jitter probability can be set via the TFT menu using keypad input.
 - **Retriggering:** Enable/disable retriggering using the dedicated switch. Retrigger probability can be set via the TFT menu using keypad input.
-- **Pitch Bend Glitching:** Random pitch bends can be triggered on synth channels.
+- **Pitch Bend Glitching:** Random pitch bends can be triggered on synth channels.  Currently, the probability is hardcoded to be somewhat rare.  
 - **Buffer Management:** Large buffer for MIDI events (384 events on MEGA). LED indicates buffer full.
 - **MIDI Panic:** Dedicated button sends "All Notes Off" to all channels. OLED displays panic status and channel matrix.
 - **Display Support:**
