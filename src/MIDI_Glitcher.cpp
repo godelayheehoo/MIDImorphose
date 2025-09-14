@@ -356,22 +356,6 @@ const int MAX_INSTRUMENTS = 16;
 //TODO: turn off octave switching... as an indepdent thing? or just when NO_OFFSETS is selected?
 //TODO: Maybe don't always have 0 octave glitching as an option?
 //TODO: We shouldn't be doing +/-2 notes, we should do +2 notes or +2-12=-10 notes.
-struct OffsetSet {
-    const byte* offsets;
-    size_t size;
-};
-//TODO: per brett we should change the octave OR add an offset?
-const byte NO_OFFSETS[1] = {0};
-const byte ANY_OFFSETS[12] = {0,1,2,3,4,5,6,7,8,9,10,11};
-const byte MAJOR_OFFSETS[6] = {2, 4, 5, 7, 9, 11};
-const byte BRETT_OFFSETS[3] = {7, 14, 21}; //+14 is a different octave, which is apparently important.  So this wil jump from 1-4 octaves, not 0-3
-// create OffsetSet instances
-const OffsetSet NO_SET = { NO_OFFSETS, 1 };
-const OffsetSet ANY_SET = { ANY_OFFSETS, 12 };
-const OffsetSet MAJOR_SET = { MAJOR_OFFSETS, 6 };
-const OffsetSet BRETT_SET = {BRETT_OFFSETS, 3};
-
-const OffsetSet* currentOffsetSet = &NO_SET;
 
 // const byte DRUM_NUMBERS[] = {};
 
@@ -399,12 +383,6 @@ const int bufferLedPin = 9;
 const int stutterButtonPin = 2;
 const int panicButtonPin = 3;
 ButtonHelper panicButton;
-
-// --- Tempo Dipswitch pins ---
-const byte onesTempoPin = 14;
-const byte twosTempoPin = 15;
-const byte foursTempoPin = 16;
-const byte eightsTempoPin = 17;
 
 // --- "Scale"/Offset dipswitch pins
 const int onesOffsetPin = 11;
@@ -553,10 +531,7 @@ bool prevStutterPressed = false;
 
 // --- Dipswitch states ---
 
-bool onesOffsetPinUp;
-bool twosOffsetPinUp;
-bool foursOffsetPinUp;
-byte offsetDipswitchVal;
+
 
 // --- Pot States --- 
 int stretchPotValueLiteral = 0;
@@ -780,10 +755,6 @@ void playSavedPulses();
 
 bool readStutterButton();
 
-byte readTempoDipswitch();
-byte readOffsetDipswitch();
-void updateOffsetSwitches();
-
 void clearOldNotes(int expiredPulse);
 
 MidiEvent createEmptyEvent(byte pulseNumber);
@@ -851,9 +822,6 @@ void setup() {
   // pinMode(panicButtonPin, INPUT_PULLUP);
   panicButton.setup(panicButtonPin);
 
-  pinMode(onesOffsetPin, INPUT_PULLUP);
-  pinMode(twosOffsetPin, INPUT_PULLUP);
-  pinMode(foursOffsetPin, INPUT_PULLUP);
   pinMode(bufferLedPin, OUTPUT);
   logButton.setup(logButtonPin, INPUT);
 
@@ -884,7 +852,6 @@ void setup() {
 
   digitalWrite(bufferLedPin, LOW);
 
-  updateOffsetSwitches();
 
 
   // //setup menu screen
@@ -1060,9 +1027,6 @@ void loop() {
   }
 
  
-
-
-updateOffsetSwitches();
 
   ///////Panic button logic
 if (panicButton.update()) {
@@ -1487,41 +1451,6 @@ bool readStutterButton() {
 
 
 
-byte readOffsetDipswitch(){
-  onesOffsetPinUp = digitalRead(onesOffsetPin) == LOW;
-  twosOffsetPinUp = digitalRead(twosOffsetPin) == LOW;
-  foursOffsetPinUp = digitalRead(foursOffsetPin) == LOW;
-
-  int val = 0;
-  if (onesOffsetPinUp) {
-    val += 1;
-  }
-  if (twosOffsetPinUp) {
-    val += 2;
-  }
-  if (foursOffsetPinUp){
-    val += 4;
-  }
-
-
-  return val;
-}
-void updateOffsetSwitches(){
-  //offset dipswitch
- offsetDipswitchVal = readOffsetDipswitch();
- //get offset array from offsetDipswitchVal
- switch(offsetDipswitchVal) {
-  case 0:  currentOffsetSet = &NO_SET;  break; 
-  case 1:  currentOffsetSet = &ANY_SET;  break;   
-  case 2:  currentOffsetSet = &MAJOR_SET;  break;   
-  case 3:  currentOffsetSet = &BRETT_SET; break;   
-  case 4:  currentOffsetSet = &NO_SET; break;   
-  case 5:  currentOffsetSet = &NO_SET; break;   
-  case 6:  currentOffsetSet = &NO_SET; break;   
-  case 7:  currentOffsetSet = &NO_SET; break;   
- }
-}
-
 void clearOldNotes(int expiredPulse) {
   // Serial.print("Clearing out pulse #");
   // Serial.println(expiredPulse);
@@ -1736,7 +1665,7 @@ MidiEvent maybeNoteNumberJitter(MidiEvent event) {
   if (randomProbResult(menu.noteJitterProb)) {
         Serial.print(F("jittering note on channel "));
         Serial.println(event.channel);
-        byte jitter = pickRandomElement(currentOffsetSet->offsets, currentOffsetSet->size);
+        byte jitter = pickRandomElement(menu.currentOffsetSet->offsets, menu.currentOffsetSet->size);
         int8_t plus_or_minus = randomProbResult(50) ? 1 : -1;  // ternary operator
         int8_t octave = randomOctave();
         byte jittered_note = (int)current_note + (jitter + plus_or_minus*12*octave);

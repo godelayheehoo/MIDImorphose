@@ -9,8 +9,29 @@ enum MenuState {
     NOTE_JITTER_PROB_MENU,
     RETRIGGER_PROB_MENU,
     CHANNEL_CONFIG_MENU,
-    STUTTER_LENGTH_MENU
+    STUTTER_LENGTH_MENU,
+    OFFSET_MENU
 };
+// Offset sets and labels
+struct OffsetSet {
+    const byte* offsets;
+    size_t size;
+};
+static byte NO_OFFSETS[1] = {0};
+static byte ANY_OFFSETS[12] = {0,1,2,3,4,5,6,7,8,9,10,11};
+static byte MAJOR_OFFSETS[6] = {2, 4, 5, 7, 9, 11};
+static byte BRETT_OFFSETS[3] = {7, 14, 21};
+static OffsetSet OFFSET_SETS[4] = {
+    {NO_OFFSETS, 1},
+    {ANY_OFFSETS, 12},
+    {MAJOR_OFFSETS, 6},
+    {BRETT_OFFSETS, 3}
+};
+static const char* OFFSET_LABELS[4] = {
+    "No Offset", "Any Offset", "Major", "Brett"
+};
+const int NUM_OFFSET_OPTIONS = 4;
+const int OFFSET_TOTAL_ITEMS = NUM_OFFSET_OPTIONS + 1; // 1 for '...', rest for options
 // Stutter length menu options (pulse resolutions and labels)
 const int NUM_STUTTER_LENGTH_OPTIONS = 16;
 const int STUTTER_LENGTH_TOTAL_ITEMS = NUM_STUTTER_LENGTH_OPTIONS + 1; // 1 for '...', rest for options
@@ -77,4 +98,11 @@ public:
     int stutterLengthActiveIdx = 1; // Active option, initially Option 1 (index 1)
     // Stutter length menu-held pulse resolution
     unsigned int pulseResolution = STUTTER_LENGTH_PULSE_RESOLUTIONS[9]; // Default to 1/4 note (index 9)
+    // Offset menu selection
+    int offsetSelectedIdx = 0; // 0 = '...', 1-4 = options
+    int offsetScrollIdx = 0;
+    static const int OFFSET_VISIBLE_OPTIONS = 3;
+    int offsetActiveIdx = 1; // Active option, initially Option 1 (index 1)
+    // Pointer to current offset set
+    OffsetSet* currentOffsetSet; // Will be initialized in constructor
 };

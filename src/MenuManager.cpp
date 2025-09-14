@@ -1,7 +1,9 @@
 
 #include "MenuManager.h"
 
-MenuManager::MenuManager(Adafruit_ST7789& display) : tft(display), currentMenu(MAIN_MENU) {}
+MenuManager::MenuManager(Adafruit_ST7789& display) : tft(display), currentMenu(MAIN_MENU) {
+    currentOffsetSet = &OFFSET_SETS[0]; // Default to No Offset
+}
 
 
 void MenuManager::handleInput(MenuButton btn) {
@@ -45,7 +47,7 @@ void MenuManager::handleInput(MenuButton btn) {
     }
     switch (currentMenu) {
         case MAIN_MENU: {
-            // Now 6 items: Menu 1, Menu 2, Note Jitter Prob, Retrigger Prob, Channel Config, Stutter Length
+            // Now 7 items: Menu 1, Menu 2, Note Jitter Prob, Retrigger Prob, Channel Config, Stutter Length, Offset/Scale
             if (btn == BUTTON_UP) {
                 if (mainMenuSelectedIdx > 0) {
                     mainMenuSelectedIdx--;
@@ -54,7 +56,7 @@ void MenuManager::handleInput(MenuButton btn) {
                     }
                 }
             } else if (btn == BUTTON_DOWN) {
-                if (mainMenuSelectedIdx < 5) {
+                if (mainMenuSelectedIdx < 6) {
                     mainMenuSelectedIdx++;
                     if (mainMenuSelectedIdx > mainMenuScrollIdx + MAIN_MENU_VISIBLE_ITEMS - 1) {
                         mainMenuScrollIdx = mainMenuSelectedIdx - MAIN_MENU_VISIBLE_ITEMS + 1;
@@ -82,9 +84,39 @@ void MenuManager::handleInput(MenuButton btn) {
                     currentMenu = STUTTER_LENGTH_MENU;
                     stutterLengthSelectedIdx = 0;
                     stutterLengthScrollIdx = 0;
+                } else if (mainMenuSelectedIdx == 6) {
+                    currentMenu = OFFSET_MENU;
+                    offsetSelectedIdx = 0;
+                    offsetScrollIdx = 0;
                 }
             }
             break;
+        case OFFSET_MENU: {
+            if (btn == BUTTON_SELECT) {
+                if (offsetSelectedIdx == 0) {
+                    currentMenu = MAIN_MENU;
+                } else {
+                    offsetActiveIdx = offsetSelectedIdx;
+                    currentOffsetSet = &OFFSET_SETS[offsetSelectedIdx - 1];
+                }
+            } else if (btn == BUTTON_UP) {
+                if (offsetSelectedIdx > offsetScrollIdx) {
+                    offsetSelectedIdx--;
+                } else if (offsetScrollIdx > 0) {
+                    offsetScrollIdx--;
+                    offsetSelectedIdx = offsetScrollIdx;
+                }
+            } else if (btn == BUTTON_DOWN) {
+                int lastVisibleIdx = offsetScrollIdx + OFFSET_VISIBLE_OPTIONS - 1;
+                if (offsetSelectedIdx < lastVisibleIdx && offsetSelectedIdx < OFFSET_TOTAL_ITEMS - 1) {
+                    offsetSelectedIdx++;
+                } else if (lastVisibleIdx < OFFSET_TOTAL_ITEMS - 1) {
+                    offsetScrollIdx++;
+                    offsetSelectedIdx = offsetScrollIdx + OFFSET_VISIBLE_OPTIONS - 1;
+                }
+            }
+            break;
+        }
         }
         case STUTTER_LENGTH_MENU: {
             // Only allow selection within visible options
@@ -211,7 +243,7 @@ void MenuManager::handleRetriggerKeypad(char key) {
 void MenuManager::render() {
     if (currentMenu == MAIN_MENU) {
         // Main menu: list of menus
-        const char* menus[6] = {"Menu 1", "Menu 2", "Note Jitter Prob", "Retrigger Prob", "Channel Config", "Stutter Length"};
+        const char* menus[7] = {"Menu 1", "Menu 2", "Note Jitter Prob", "Retrigger Prob", "Channel Config", "Stutter Length", "Offset/Scale"};
         int yStart = 10;
         tft.setTextSize(2);
         tft.setCursor(10, yStart);
@@ -220,7 +252,7 @@ void MenuManager::render() {
         tft.print("Main Menu");
         int itemIdx = mainMenuScrollIdx;
         int y = yStart;
-        for (int visible = 0; visible < MAIN_MENU_VISIBLE_ITEMS && itemIdx < 6; ++visible, ++itemIdx) {
+        for (int visible = 0; visible < MAIN_MENU_VISIBLE_ITEMS && itemIdx < 7; ++visible, ++itemIdx) {
             tft.setCursor(20, y + 30);
             if (mainMenuSelectedIdx == itemIdx) {
                 tft.setTextColor(ST77XX_BLACK, ST77XX_WHITE);
@@ -228,6 +260,41 @@ void MenuManager::render() {
                 tft.setTextColor(ST77XX_WHITE, ST77XX_BLACK);
             }
             tft.print(menus[itemIdx]);
+            y += 30;
+        }
+        tft.setTextColor(ST77XX_WHITE);
+    } else if (currentMenu == OFFSET_MENU) {
+        tft.fillScreen(ST77XX_BLACK);
+        tft.setTextSize(2);
+        tft.setTextColor(ST77XX_WHITE);
+        tft.setCursor(10, 10);
+        tft.print("offset/scale");
+        int yStart = 50;
+        int itemIdx = offsetScrollIdx;
+        int y = yStart;
+        for (int visible = 0; visible < OFFSET_VISIBLE_OPTIONS && itemIdx < OFFSET_TOTAL_ITEMS; ++visible, ++itemIdx) {
+            int squareX = 10;
+            int squareY = y + 6;
+            int squareSize = 12;
+            if (itemIdx != 0) {
+                if (itemIdx == offsetActiveIdx) {
+                    tft.fillRect(squareX, squareY, squareSize, squareSize, ST77XX_MAGENTA);
+                } else {
+                    tft.drawRect(squareX, squareY, squareSize, squareSize, ST77XX_WHITE);
+                }
+            }
+            tft.setCursor(squareX + squareSize + 6, y);
+            if (offsetSelectedIdx == itemIdx) {
+                tft.setTextColor(ST77XX_BLACK, ST77XX_WHITE);
+            } else {
+                tft.setTextColor(ST77XX_WHITE, ST77XX_BLACK);
+            }
+            tft.setTextSize(2);
+            if (itemIdx == 0) {
+                tft.print("...");
+            } else {
+                tft.print(OFFSET_LABELS[itemIdx - 1]);
+            }
             y += 30;
         }
         tft.setTextColor(ST77XX_WHITE);
