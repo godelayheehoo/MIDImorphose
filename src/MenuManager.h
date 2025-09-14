@@ -70,6 +70,8 @@ public:
     MenuState currentMenu;
     // Flag for requesting channel defaults reset
     bool pendingChannelDefaultsReset = false;
+    // Scroll index for channel config menu
+    int channelConfigScrollIdx = 0;
 public:
     Adafruit_ST7789& tft;
     // Main menu selection

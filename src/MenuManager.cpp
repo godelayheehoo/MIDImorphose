@@ -11,26 +11,30 @@ void MenuManager::handleInput(MenuButton btn) {
     extern bool pendingDrumChannelUpdate;
     extern bool pendingSynthChannelUpdate;
     if (currentMenu == CHANNEL_CONFIG_MENU) {
+        // Scroll logic: 4 options, show 3 at a time
+        const int numOptions = 4;
+        const int visibleOptions = 3;
+        static int scrollIdx = 0;
         if (btn == BUTTON_UP) {
             if (channelConfigSelectedIdx > 0) channelConfigSelectedIdx--;
+            if (channelConfigSelectedIdx < scrollIdx) scrollIdx = channelConfigSelectedIdx;
         } else if (btn == BUTTON_DOWN) {
-            if (channelConfigSelectedIdx < 3) channelConfigSelectedIdx++;
+            if (channelConfigSelectedIdx < numOptions - 1) channelConfigSelectedIdx++;
+            if (channelConfigSelectedIdx > scrollIdx + visibleOptions - 1) scrollIdx = channelConfigSelectedIdx - visibleOptions + 1;
         } else if (btn == BUTTON_SELECT) {
-            if (channelConfigSelectedIdx == 0) {
-                // '...' selected, return to main menu
-                currentMenu = MAIN_MENU;
-            } else if (channelConfigSelectedIdx == 1) {
+            if (channelConfigSelectedIdx == 1) {
                 pendingSynthChannelUpdate = true;
-                currentMenu = MAIN_MENU;
             } else if (channelConfigSelectedIdx == 2) {
                 pendingDrumChannelUpdate = true;
-                currentMenu = MAIN_MENU;
             } else if (channelConfigSelectedIdx == 3) {
-                // Request reset to default
                 pendingChannelDefaultsReset = true;
+            } else if (channelConfigSelectedIdx == 0) {
+                // '...' selected, return to main menu
                 currentMenu = MAIN_MENU;
             }
         }
+        // Store scrollIdx for rendering
+        channelConfigScrollIdx = scrollIdx;
         return;
     }
     // Jitter menu: only '...' is selectable, select returns to main menu
@@ -345,8 +349,10 @@ void MenuManager::render() {
         tft.print("Channel Config");
         const char* options[4] = {"...", "set synth channels", "set drum channels", "reset to default"};
         int y = 50;
-        for (int i = 0; i < 4; ++i) {
-            tft.setCursor(20, y + i * 30);
+        int visibleOptions = 3;
+        int scrollIdx = channelConfigScrollIdx;
+        for (int i = scrollIdx; i < scrollIdx + visibleOptions && i < 4; ++i) {
+            tft.setCursor(20, y + (i - scrollIdx) * 30);
             if (channelConfigSelectedIdx == i) {
                 tft.setTextColor(ST77XX_BLACK, ST77XX_WHITE);
             } else {
