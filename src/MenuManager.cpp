@@ -1,5 +1,6 @@
 // Save menu settings to EEPROM
 #include <EEPROM.h>
+#include "MenuManager.h"
 
 void MenuManager::saveStutterLength(int eepromAddr) {
     EEPROM.write(eepromAddr, stutterLengthActiveIdx);
@@ -25,7 +26,7 @@ void MenuManager::saveRetriggerProb(int eepromAddr) {
     EEPROM.write(eepromAddr, retriggerProb);
 }
 
-#include "MenuManager.h"
+
 
 MenuManager::MenuManager(Adafruit_ST7789& display) : tft(display), currentMenu(MAIN_MENU) {
     currentOffsetSet = &OFFSET_SETS[0]; // Default to No Offset
@@ -132,6 +133,7 @@ void MenuManager::handleInput(MenuButton btn) {
                 } else {
                     offsetActiveIdx = offsetSelectedIdx;
                     currentOffsetSet = &OFFSET_SETS[offsetSelectedIdx - 1];
+                    saveOffset(EEPROM_ADDR_OFFSET);
                 }
             } else if (btn == BUTTON_UP) {
                 if (offsetSelectedIdx > offsetScrollIdx) {
@@ -160,6 +162,7 @@ void MenuManager::handleInput(MenuButton btn) {
                 } else {
                     stutterLengthActiveIdx = stutterLengthSelectedIdx;
                     pulseResolution = STUTTER_LENGTH_PULSE_RESOLUTIONS[stutterLengthSelectedIdx - 1];
+                    saveStutterLength(EEPROM_ADDR_STUTTER_LENGTH);
                 }
             } else if (btn == BUTTON_UP) {
                 if (stutterLengthSelectedIdx > stutterLengthScrollIdx) {
@@ -185,6 +188,7 @@ void MenuManager::handleInput(MenuButton btn) {
                     currentMenu = MAIN_MENU;
                 } else {
                     menu1ActiveIdx = menu1SelectedIdx;
+                    saveMenu1(EEPROM_ADDR_MENU1);
                 }
             } else if (btn == BUTTON_UP) {
                 if (menu1SelectedIdx > 0) {
@@ -210,6 +214,7 @@ void MenuManager::handleInput(MenuButton btn) {
                     currentMenu = MAIN_MENU;
                 } else {
                     menuBActiveIdx = menuBSelectedIdx;
+                    saveMenuB(EEPROM_ADDR_MENUB);
                 }
             } else if (btn == BUTTON_UP) {
                 if (menuBSelectedIdx > 0) {
@@ -243,6 +248,7 @@ void MenuManager::handleJitterKeypad(char key) {
         int val = jitterInputBuffer.toInt();
         if (val > 100) val = 100;
         noteJitterProb = val;
+        saveNoteJitterProb(EEPROM_ADDR_JITTER_PROB);
         jitterInputBuffer = String(val); // Show clamped value
         inputLocked = true;
     } else if (key >= '0' && key <= '9') {
@@ -264,6 +270,7 @@ void MenuManager::handleRetriggerKeypad(char key) {
         int val = retriggerInputBuffer.toInt();
         if (val > 100) val = 100;
         retriggerProb = val;
+        saveRetriggerProb(EEPROM_ADDR_RETRIGGER_PROB);
         retriggerInputBuffer = String(val); // Show clamped value
         inputLocked = true;
     } else if (key >= '0' && key <= '9') {
