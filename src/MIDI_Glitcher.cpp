@@ -400,9 +400,6 @@ const int stutterButtonPin = 2;
 const int panicButtonPin = 3;
 ButtonHelper panicButton;
 
-const int drumMIDIButtonPin =  4;// the red button
-const int synthMIDIButtonPin = 5; // the green button
-
 // --- Tempo Dipswitch pins ---
 const byte onesTempoPin = 14;
 const byte twosTempoPin = 15;
@@ -553,12 +550,6 @@ bool isBlinking = false;
 // --- Button states ---
 bool stutterButtonPressed = false;
 bool prevStutterPressed = false;
-// bool panicButtonPressed = false;
-// bool prevPanicPressed = false;
-bool drumMIDIButtonPressed = false;
-bool prevDrumMIDIButtonPressed = false;
-bool synthMIDIButtonPressed = false;
-bool prevSynthMIDIButtonPressed = false;
 
 // --- Dipswitch states ---
 bool onesTempoPinUp;
@@ -873,8 +864,6 @@ void setup() {
   pinMode(twosOffsetPin, INPUT_PULLUP);
   pinMode(foursOffsetPin, INPUT_PULLUP);
   pinMode(bufferLedPin, OUTPUT);
-  pinMode(drumMIDIButtonPin, INPUT); //trying just input --works
-  pinMode(synthMIDIButtonPin, INPUT); //trying just input --works
   logButton.setup(logButtonPin, INPUT);
 
   retriggerSwitch.setup(retriggerSwitchPin);
@@ -1043,11 +1032,6 @@ void loop() {
 
   stutterButtonPressed = readStutterButton();
   
-
-
-//trying making these low
-  // drumMIDIButtonPressed = digitalRead(drumMIDIButtonPin)==HIGH;
-  // synthMIDIButtonPressed = digitalRead(synthMIDIButtonPin)==HIGH;
 
   if(pendingDrumChannelUpdate){
     Serial.println(F("Drum button pressed!"));
@@ -1421,8 +1405,6 @@ if(logButton.update()){
 
   prevStutterPressed = stutterButtonPressed;
   prevLooping = isLooping;
-  prevDrumMIDIButtonPressed = drumMIDIButtonPressed;
-  prevSynthMIDIButtonPressed = synthMIDIButtonPressed;
   oldPulseResolution = pulseResolution;
   
     
