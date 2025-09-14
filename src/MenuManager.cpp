@@ -1,3 +1,29 @@
+// Save menu settings to EEPROM
+#include <EEPROM.h>
+
+void MenuManager::saveStutterLength(int eepromAddr) {
+    EEPROM.write(eepromAddr, stutterLengthActiveIdx);
+}
+
+void MenuManager::saveOffset(int eepromAddr) {
+    EEPROM.write(eepromAddr, offsetActiveIdx);
+}
+
+void MenuManager::saveMenu1(int eepromAddr) {
+    EEPROM.write(eepromAddr, menu1ActiveIdx);
+}
+
+void MenuManager::saveMenuB(int eepromAddr) {
+    EEPROM.write(eepromAddr, menuBActiveIdx);
+}
+
+void MenuManager::saveNoteJitterProb(int eepromAddr) {
+    EEPROM.write(eepromAddr, noteJitterProb);
+}
+
+void MenuManager::saveRetriggerProb(int eepromAddr) {
+    EEPROM.write(eepromAddr, retriggerProb);
+}
 
 #include "MenuManager.h"
 

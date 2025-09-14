@@ -1,5 +1,3 @@
-#define EEPROM_MAGIC 0x01
-
 /*
   MIDI_repeater_midiClock_v7.ino
   Stutters (loops) midi on pressing button.  One bank of dipswitches controls active midi channels (treating drum and synth seperately, see below), 
@@ -73,6 +71,7 @@ channel to off and updating.  There's nuance here though-- the stuttered notes w
 //TODO: percolation seems to degenerate, like it gets stuck to a certain note.  Maybe it's not undoing its buffer or something. Maybe it *is* editing notes in place. 
 
 #include <EEPROM.h>
+#define EEPROM_MAGIC 0x02
 
 #include <EEPROM.h>
 #include <Arduino.h>
@@ -116,6 +115,16 @@ const unsigned long TEMP_DISPLAY_TIME = 2000;  // milliseconds
 #define TFT_RST  -1
 
 //menu setup
+// EEPROM addresses for menu settings
+#define EEPROM_ADDR_MAGIC          0
+#define EEPROM_ADDR_DRUM_STATE     1
+#define EEPROM_ADDR_SYNTH_STATE    17
+#define EEPROM_ADDR_STUTTER_LENGTH 33
+#define EEPROM_ADDR_OFFSET         34
+#define EEPROM_ADDR_MENU1          35
+#define EEPROM_ADDR_MENUB          36
+#define EEPROM_ADDR_JITTER_PROB    37
+#define EEPROM_ADDR_RETRIGGER_PROB 38
 // SPI1 hardware peripheral
 Adafruit_ST7789 menuTft = Adafruit_ST7789(&SPI1, TFT_CS, TFT_DC, TFT_RST);
 MenuManager menu(menuTft);
@@ -899,15 +908,22 @@ void setup() {
   Serial.println("Menu buttons set up");
 
 
-  //load EEPROM states
+  //load EEPROM states and menu settings
   Serial.println("Loading EEPROM states");
-  uint8_t magic = EEPROM.read(0);
+  uint8_t magic = EEPROM.read(EEPROM_ADDR_MAGIC);
   uint16_t drumState = 0;
   uint16_t synthState = 0;
   if (magic == EEPROM_MAGIC) {
-    EEPROM.get(1, drumState);
-    EEPROM.get(17, synthState);
-    Serial.println("EEPROM states loaded");
+    EEPROM.get(EEPROM_ADDR_DRUM_STATE, drumState);
+    EEPROM.get(EEPROM_ADDR_SYNTH_STATE, synthState);
+    // Load menu settings from fixed addresses
+    menu.stutterLengthActiveIdx = EEPROM.read(EEPROM_ADDR_STUTTER_LENGTH);
+    menu.offsetActiveIdx = EEPROM.read(EEPROM_ADDR_OFFSET);
+    menu.menu1ActiveIdx = EEPROM.read(EEPROM_ADDR_MENU1);
+    menu.menuBActiveIdx = EEPROM.read(EEPROM_ADDR_MENUB);
+    menu.noteJitterProb = EEPROM.read(EEPROM_ADDR_JITTER_PROB);
+    menu.retriggerProb = EEPROM.read(EEPROM_ADDR_RETRIGGER_PROB);
+    Serial.println("EEPROM states and menu settings loaded");
   } else {
     Serial.println("EEPROM magic byte not found, using defaults");
     // Drum defaults: false, false, false, false, false, false, false, false, false, true, true, false, false, false, false, false
@@ -921,6 +937,13 @@ void setup() {
       if (drumDefaults[i]) drumState |= (1 << i);
       if (synthDefaults[i]) synthState |= (1 << i);
     }
+    // Set menu defaults
+    menu.stutterLengthActiveIdx = 9; // 1/4 note
+    menu.offsetActiveIdx = 1; // Any Offset
+    menu.menu1ActiveIdx = 1;
+    menu.menuBActiveIdx = 1;
+    menu.noteJitterProb = 0;
+    menu.retriggerProb = 10;
   }
 
   // Decode drumMIDIenabled and synthMIDIenabled arrays
@@ -928,13 +951,19 @@ void setup() {
     drumMIDIenabled[i] = (drumState & (1 << i)) ? true : false;
     synthMIDIenabled[i] = (synthState & (1 << i)) ? true : false;
   }
-  
   Serial.println(F("Drawing SD matrix again (why?)"));
-//setup OLED
   drawSDMatrix(drumMIDIenabled, synthMIDIenabled); 
-
-  //get menu pulse resolution 
   oldPulseResolution = menu.pulseResolution;
+  // To save a setting after it changes, use:
+  // EEPROM.write(EEPROM_ADDR_MAGIC, EEPROM_MAGIC);
+  // EEPROM.put(EEPROM_ADDR_DRUM_STATE, drumState);
+  // EEPROM.put(EEPROM_ADDR_SYNTH_STATE, synthState);
+  // EEPROM.write(EEPROM_ADDR_STUTTER_LENGTH, menu.stutterLengthActiveIdx);
+  // EEPROM.write(EEPROM_ADDR_OFFSET, menu.offsetActiveIdx);
+  // EEPROM.write(EEPROM_ADDR_MENU1, menu.menu1ActiveIdx);
+  // EEPROM.write(EEPROM_ADDR_MENUB, menu.menuBActiveIdx);
+  // EEPROM.write(EEPROM_ADDR_JITTER_PROB, menu.noteJitterProb);
+  // EEPROM.write(EEPROM_ADDR_RETRIGGER_PROB, menu.retriggerProb);
 
   Serial.println(F("Ending setup"));
 }

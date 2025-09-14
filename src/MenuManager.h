@@ -1,6 +1,7 @@
 
 #pragma once
 #include <Adafruit_ST7789.h>
+#include "EEPROMAddresses.h"
 
 enum MenuState {
     MAIN_MENU,
@@ -72,6 +73,13 @@ public:
     bool pendingChannelDefaultsReset = false;
     // Scroll index for channel config menu
     int channelConfigScrollIdx = 0;
+    // Save functions for each menu setting
+    void saveStutterLength(int eepromAddr);
+    void saveOffset(int eepromAddr);
+    void saveMenu1(int eepromAddr);
+    void saveMenuB(int eepromAddr);
+    void saveNoteJitterProb(int eepromAddr);
+    void saveRetriggerProb(int eepromAddr);
 public:
     Adafruit_ST7789& tft;
     // Main menu selection
