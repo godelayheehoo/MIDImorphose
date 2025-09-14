@@ -3,26 +3,34 @@
 #include "MenuManager.h"
 
 void MenuManager::saveStutterLength(int eepromAddr) {
+    EEPROM.write(EEPROM_ADDR_MAGIC, EEPROM_MAGIC);
     EEPROM.write(eepromAddr, stutterLengthActiveIdx);
 }
 
 void MenuManager::saveOffset(int eepromAddr) {
+    EEPROM.write(EEPROM_ADDR_MAGIC, EEPROM_MAGIC);
     EEPROM.write(eepromAddr, offsetActiveIdx);
 }
 
 void MenuManager::saveMenu1(int eepromAddr) {
+    EEPROM.write(EEPROM_ADDR_MAGIC, EEPROM_MAGIC);
     EEPROM.write(eepromAddr, menu1ActiveIdx);
 }
 
 void MenuManager::saveMenuB(int eepromAddr) {
+    EEPROM.write(EEPROM_ADDR_MAGIC, EEPROM_MAGIC);
     EEPROM.write(eepromAddr, menuBActiveIdx);
 }
 
 void MenuManager::saveNoteJitterProb(int eepromAddr) {
+    EEPROM.write(EEPROM_ADDR_MAGIC, EEPROM_MAGIC);
     EEPROM.write(eepromAddr, noteJitterProb);
+    Serial.print("saveNoteJitterProb called, value: ");
+    Serial.println(noteJitterProb);
 }
 
 void MenuManager::saveRetriggerProb(int eepromAddr) {
+    EEPROM.write(EEPROM_ADDR_MAGIC, EEPROM_MAGIC);
     EEPROM.write(eepromAddr, retriggerProb);
 }
 
@@ -108,10 +116,10 @@ void MenuManager::handleInput(MenuButton btn) {
                     menuBScrollIdx = 0;
                 } else if (mainMenuSelectedIdx == 2) {
                     currentMenu = NOTE_JITTER_PROB_MENU;
-                    jitterInputBuffer = "";
+                    jitterInputBuffer = String(noteJitterProb);
                 } else if (mainMenuSelectedIdx == 3) {
                     currentMenu = RETRIGGER_PROB_MENU;
-                    retriggerInputBuffer = "";
+                    retriggerInputBuffer = String(retriggerProb);
                 } else if (mainMenuSelectedIdx == 4) {
                     currentMenu = CHANNEL_CONFIG_MENU;
                     channelConfigSelectedIdx = 0;

@@ -1,4 +1,7 @@
 #pragma once
+//EEPROM magic number to indicate valid stored settings
+#define EEPROM_MAGIC 0x03
+
 // EEPROM address constants for all menu settings and states
 #define EEPROM_ADDR_MAGIC          0
 #define EEPROM_ADDR_DRUM_STATE     1

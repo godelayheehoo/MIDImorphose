@@ -71,7 +71,7 @@ channel to off and updating.  There's nuance here though-- the stuttered notes w
 //TODO: percolation seems to degenerate, like it gets stuck to a certain note.  Maybe it's not undoing its buffer or something. Maybe it *is* editing notes in place. 
 
 #include <EEPROM.h>
-#define EEPROM_MAGIC 0x02
+
 
 #include <EEPROM.h>
 #include <Arduino.h>
@@ -914,16 +914,18 @@ void setup() {
   uint16_t drumState = 0;
   uint16_t synthState = 0;
   if (magic == EEPROM_MAGIC) {
-    EEPROM.get(EEPROM_ADDR_DRUM_STATE, drumState);
-    EEPROM.get(EEPROM_ADDR_SYNTH_STATE, synthState);
-    // Load menu settings from fixed addresses
-    menu.stutterLengthActiveIdx = EEPROM.read(EEPROM_ADDR_STUTTER_LENGTH);
-    menu.offsetActiveIdx = EEPROM.read(EEPROM_ADDR_OFFSET);
-    menu.menu1ActiveIdx = EEPROM.read(EEPROM_ADDR_MENU1);
-    menu.menuBActiveIdx = EEPROM.read(EEPROM_ADDR_MENUB);
-    menu.noteJitterProb = EEPROM.read(EEPROM_ADDR_JITTER_PROB);
-    menu.retriggerProb = EEPROM.read(EEPROM_ADDR_RETRIGGER_PROB);
-    Serial.println("EEPROM states and menu settings loaded");
+  EEPROM.get(EEPROM_ADDR_DRUM_STATE, drumState);
+  EEPROM.get(EEPROM_ADDR_SYNTH_STATE, synthState);
+  // Load menu settings from fixed addresses
+  menu.stutterLengthActiveIdx = EEPROM.read(EEPROM_ADDR_STUTTER_LENGTH);
+  menu.offsetActiveIdx = EEPROM.read(EEPROM_ADDR_OFFSET);
+  menu.menu1ActiveIdx = EEPROM.read(EEPROM_ADDR_MENU1);
+  menu.menuBActiveIdx = EEPROM.read(EEPROM_ADDR_MENUB);
+  menu.noteJitterProb = EEPROM.read(EEPROM_ADDR_JITTER_PROB);
+  menu.retriggerProb = EEPROM.read(EEPROM_ADDR_RETRIGGER_PROB);
+  Serial.print("Loaded noteJitterProb from EEPROM: ");
+  Serial.println(menu.noteJitterProb);
+  Serial.println("EEPROM states and menu settings loaded");
   } else {
     Serial.println("EEPROM magic byte not found, using defaults");
     // Drum defaults: false, false, false, false, false, false, false, false, false, true, true, false, false, false, false, false
@@ -944,7 +946,18 @@ void setup() {
     menu.menuBActiveIdx = 1;
     menu.noteJitterProb = 0;
     menu.retriggerProb = 10;
+  // Immediately save defaults to EEPROM so future boots load correct values
+  EEPROM.write(EEPROM_ADDR_MAGIC, EEPROM_MAGIC);
+  EEPROM.put(EEPROM_ADDR_DRUM_STATE, drumState);
+  EEPROM.put(EEPROM_ADDR_SYNTH_STATE, synthState);
+  menu.saveStutterLength(EEPROM_ADDR_STUTTER_LENGTH);
+  menu.saveOffset(EEPROM_ADDR_OFFSET);
+  menu.saveMenu1(EEPROM_ADDR_MENU1);
+  menu.saveMenuB(EEPROM_ADDR_MENUB);
+  menu.saveNoteJitterProb(EEPROM_ADDR_JITTER_PROB);
+  menu.saveRetriggerProb(EEPROM_ADDR_RETRIGGER_PROB);
   }
+
 
   // Decode drumMIDIenabled and synthMIDIenabled arrays
   for (int i = 0; i < 16; i++) {
@@ -964,13 +977,14 @@ void setup() {
   // EEPROM.write(EEPROM_ADDR_MENUB, menu.menuBActiveIdx);
   // EEPROM.write(EEPROM_ADDR_JITTER_PROB, menu.noteJitterProb);
   // EEPROM.write(EEPROM_ADDR_RETRIGGER_PROB, menu.retriggerProb);
+ 
 
   Serial.println(F("Ending setup"));
 }
 
 void loop() {
-  //debug, just flash colors on menu for now -- will need to add timing if you want to use this. 
   
+
   
   //debug
     // --- Poll keypad every 50ms ---
@@ -1072,9 +1086,9 @@ void loop() {
       if (synthDefaults[i]) synthState |= (1 << i);
     }
     // Save to EEPROM
-    EEPROM.write(0, EEPROM_MAGIC);
-    EEPROM.put(1, drumState);
-    EEPROM.put(17, synthState);
+    EEPROM.write(EEPROM_ADDR_MAGIC, EEPROM_MAGIC);
+    EEPROM.put(EEPROM_ADDR_DRUM_STATE, drumState);
+    EEPROM.put(EEPROM_ADDR_SYNTH_STATE, synthState);
     Serial.println(F("Channel config defaults saved to EEPROM."));
     drawSDMatrix(drumMIDIenabled, synthMIDIenabled);
     menu.pendingChannelDefaultsReset = false;
@@ -1996,8 +2010,8 @@ if (newSynthState != oldSynthState) {
   oldSynthState = newSynthState;
   drawSDMatrix(drumMIDIenabled, synthMIDIenabled);  // you can update arrays too if needed
   // Save newSynthState to EEPROM as uint16_t
-  EEPROM.write(0, EEPROM_MAGIC); // Write magic byte
-  EEPROM.put(17, newSynthState);
+  EEPROM.write(EEPROM_ADDR_MAGIC, EEPROM_MAGIC); // Write magic byte
+  EEPROM.put(EEPROM_ADDR_SYNTH_STATE, newSynthState);
   Serial.println("Wrote synth state to EEPROM");
 }
 }
@@ -2017,8 +2031,8 @@ if (newDrumState != oldDrumState) {
   oldDrumState = newDrumState;
   drawSDMatrix(drumMIDIenabled, synthMIDIenabled);  // you can update arrays too if needed
   // Save newDrumState to EEPROM as uint16_t
-  EEPROM.write(0, EEPROM_MAGIC); // Write magic byte
-  EEPROM.put(1, newDrumState);
+  EEPROM.write(EEPROM_ADDR_MAGIC, EEPROM_MAGIC); // Write magic byte
+  EEPROM.put(EEPROM_ADDR_DRUM_STATE, newDrumState);
   Serial.println("Wrote drum state to EEPROM");
 }
 }
