@@ -797,7 +797,7 @@ MidiEvent maybeNoteNumberJitter(MidiEvent event);
 MidiEvent maybePercolateNote(MidiEvent event, byte index_number);
 
 
-// Add these global flags near the top of your file
+// --- State variables for pending updates ---
 bool pendingDrumChannelUpdate = false;
 bool pendingSynthChannelUpdate = false;
 
@@ -1026,6 +1026,29 @@ void loop() {
     Serial.println(F("Synth button pressed!"));
     updateSynthSwitches();
     pendingSynthChannelUpdate=false;
+  }
+
+  // Handle menu-driven reset to default for channel config
+  if(menu.pendingChannelDefaultsReset) {
+    Serial.println(F("Resetting channel config to defaults!"));
+    // Drum defaults: false, false, false, false, false, false, false, false, false, true, true, false, false, false, false, false
+    bool drumDefaults[16] = {false, false, false, false, false, false, false, false, false, true, true, false, false, false, false, false};
+    bool synthDefaults[16] = {true, true, true, true, true, true, true, true, true, false, false, true, true, false, false, false};
+    uint16_t drumState = 0;
+    uint16_t synthState = 0;
+    for (int i = 0; i < 16; i++) {
+      drumMIDIenabled[i] = drumDefaults[i];
+      synthMIDIenabled[i] = synthDefaults[i];
+      if (drumDefaults[i]) drumState |= (1 << i);
+      if (synthDefaults[i]) synthState |= (1 << i);
+    }
+    // Save to EEPROM
+    EEPROM.write(0, EEPROM_MAGIC);
+    EEPROM.put(1, drumState);
+    EEPROM.put(17, synthState);
+    Serial.println(F("Channel config defaults saved to EEPROM."));
+    drawSDMatrix(drumMIDIenabled, synthMIDIenabled);
+    menu.pendingChannelDefaultsReset = false;
   }
 
 // read switches and build new state

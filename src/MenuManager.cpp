@@ -14,7 +14,7 @@ void MenuManager::handleInput(MenuButton btn) {
         if (btn == BUTTON_UP) {
             if (channelConfigSelectedIdx > 0) channelConfigSelectedIdx--;
         } else if (btn == BUTTON_DOWN) {
-            if (channelConfigSelectedIdx < 2) channelConfigSelectedIdx++;
+            if (channelConfigSelectedIdx < 3) channelConfigSelectedIdx++;
         } else if (btn == BUTTON_SELECT) {
             if (channelConfigSelectedIdx == 0) {
                 // '...' selected, return to main menu
@@ -24,6 +24,10 @@ void MenuManager::handleInput(MenuButton btn) {
                 currentMenu = MAIN_MENU;
             } else if (channelConfigSelectedIdx == 2) {
                 pendingDrumChannelUpdate = true;
+                currentMenu = MAIN_MENU;
+            } else if (channelConfigSelectedIdx == 3) {
+                // Request reset to default
+                pendingChannelDefaultsReset = true;
                 currentMenu = MAIN_MENU;
             }
         }
@@ -339,9 +343,9 @@ void MenuManager::render() {
         tft.setTextColor(ST77XX_WHITE);
         tft.setCursor(10, 10);
         tft.print("Channel Config");
-        const char* options[3] = {"...", "set synth channels", "set drum channels"};
+        const char* options[4] = {"...", "set synth channels", "set drum channels", "reset to default"};
         int y = 50;
-        for (int i = 0; i < 3; ++i) {
+        for (int i = 0; i < 4; ++i) {
             tft.setCursor(20, y + i * 30);
             if (channelConfigSelectedIdx == i) {
                 tft.setTextColor(ST77XX_BLACK, ST77XX_WHITE);

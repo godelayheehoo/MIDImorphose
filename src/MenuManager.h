@@ -68,6 +68,8 @@ public:
     void handleJitterKeypad(char key); // For NOTE_JITTER_PROB_MENU
     void handleRetriggerKeypad(char key); // For RETRIGGER_PROB_MENU
     MenuState currentMenu;
+    // Flag for requesting channel defaults reset
+    bool pendingChannelDefaultsReset = false;
 public:
     Adafruit_ST7789& tft;
     // Main menu selection
