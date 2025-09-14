@@ -1,3 +1,4 @@
+#define EEPROM_MAGIC 0x01
 
 /*
   MIDI_repeater_midiClock_v7.ino
@@ -900,11 +901,27 @@ void setup() {
 
   //load EEPROM states
   Serial.println("Loading EEPROM states");
+  uint8_t magic = EEPROM.read(0);
   uint16_t drumState = 0;
   uint16_t synthState = 0;
-  EEPROM.get(0, drumState);
-  EEPROM.get(16, synthState);
-  Serial.println("EEPROM states loaded");
+  if (magic == EEPROM_MAGIC) {
+    EEPROM.get(1, drumState);
+    EEPROM.get(17, synthState);
+    Serial.println("EEPROM states loaded");
+  } else {
+    Serial.println("EEPROM magic byte not found, using defaults");
+    // Drum defaults: false, false, false, false, false, false, false, false, false, true, true, false, false, false, false, false
+    bool drumDefaults[16] = {false, false, false, false, false, false, false, false, false, true, true, false, false, false, false, false};
+    bool synthDefaults[16] = {true, true, true, true, true, true, true, true, true, false, false, true, true, false, false, false};
+    drumState = 0;
+    synthState = 0;
+    for (int i = 0; i < 16; i++) {
+      drumMIDIenabled[i] = drumDefaults[i];
+      synthMIDIenabled[i] = synthDefaults[i];
+      if (drumDefaults[i]) drumState |= (1 << i);
+      if (synthDefaults[i]) synthState |= (1 << i);
+    }
+  }
 
   // Decode drumMIDIenabled and synthMIDIenabled arrays
   for (int i = 0; i < 16; i++) {
@@ -1927,7 +1944,8 @@ if (newSynthState != oldSynthState) {
   oldSynthState = newSynthState;
   drawSDMatrix(drumMIDIenabled, synthMIDIenabled);  // you can update arrays too if needed
   // Save newSynthState to EEPROM as uint16_t
-  EEPROM.put(16, newSynthState);
+  EEPROM.write(0, EEPROM_MAGIC); // Write magic byte
+  EEPROM.put(17, newSynthState);
   Serial.println("Wrote synth state to EEPROM");
 }
 }
@@ -1947,7 +1965,8 @@ if (newDrumState != oldDrumState) {
   oldDrumState = newDrumState;
   drawSDMatrix(drumMIDIenabled, synthMIDIenabled);  // you can update arrays too if needed
   // Save newDrumState to EEPROM as uint16_t
-  EEPROM.put(0, newDrumState);
+  EEPROM.write(0, EEPROM_MAGIC); // Write magic byte
+  EEPROM.put(1, newDrumState);
   Serial.println("Wrote drum state to EEPROM");
 }
 }
@@ -1986,12 +2005,14 @@ void drawStretchStatusDisplay() {
   statusDisplay.setCursor(0, 0);
   statusDisplay.print("stretch");
   // Large text: value bottom right
-  statusDisplay.setTextSize(3);
+  statusDisplay.setTextSize(4);
   int16_t x1, y1;
   uint16_t w, h;
   statusDisplay.getTextBounds(stretchVal, 0, 0, &x1, &y1, &w, &h);
   int x = statusDisplay.width() - w - 2;
   int y = statusDisplay.height() - h - 2;
+  if (x < 0) x = 0;
+  if (y < 0) y = 0;
   statusDisplay.setCursor(x, y);
   statusDisplay.print(stretchVal);
   statusDisplay.display();
