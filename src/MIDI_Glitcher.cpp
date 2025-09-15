@@ -1,28 +1,6 @@
 /*
   MIDI_repeater_midiClock_v7.ino
   Stutters (loops) midi on pressing button.  One bank of dipswitches controls active midi channels (treating drum and synth seperately, see below), 
-  the other controls timing as follows (base-2 interpretation, power is switch_number-1):
-
-### Timing Resolution Table
-
-| Dipswitch Value | Pulse Resolution | Note Division         |
-|-----------------|-----------------|---------------------|
-| 0               | 3               | 1/32 note           |
-| 1               | 4               | 1/32 triplet        |
-| 2               | 6               | 1/16 note           |
-| 3               | 8               | 1/16 triplet        |
-| 4               | 9               | dotted 1/16 note    |
-| 5               | 12              | 1/8 note            |
-| 6               | 15              | 5/32 note (odd)     |
-| 7               | 16              | 1/8 triplet         |
-| 8               | 18              | dotted 1/8 note     |
-| 9               | 24              | 1/4 note            |
-| 10              | 32              | 1/4 triplet         |
-| 11              | 36              | dotted 1/4 note     |
-| 12              | 48              | 1/2 note            |
-| 13              | 64              | 1/2 triplet         |
-| 14              | 72              | dotted 1/2 note     |
-| 15              | 96              | whole note          |
 
 
 The buffer that holds midi events is large but not unlimited.  On a MEGA, it holds 8*48=384 midi note on/off events.  You actually get a little more than that due to some optimization.
@@ -31,6 +9,7 @@ The warning LED will blink 4 times if you are writing to a full buffer (which wi
 A MIDI PANIC button is available to kill stuck or errant notes.  A bug I haven't been able to pin down will occasionally cause unsequenced/played notes to randomly play. These are 
 often outside of the valid MIDI range, so your device's behavior is not predictable. 
 
+//TODO: update this to explain menu settings. 
 To update the DRUM MIDI channel settings, set the dipswitches and press the red button. TO do the same for synths, press the green button. Note channels can also be both or neither.
 Drum channels (TODO) feature instrument swapping (TODO: set note range)
 Synth channels (TODO) feature note jitter
@@ -40,25 +19,12 @@ channel to off and updating.  There's nuance here though-- the stuttered notes w
 
 */
 
-//todo:
-//- handle errant note problem
-// - make it so that if the midi channel is NOT selected, we just pass through the notes even when stuttering?  This may require significant rewriting. Not positive we want that.
-// I guess so.  We'll save this for when we're actually sending midi through the hub though, so we can test with multiple instruments.s
-// - figure out the "release freakout" behavior (maybe related to #2 here)
-// calulate the average of the last set of empty note-durations (end events) and average them to find pulseDuration, which is then used to mark the playback Loop duration.
-//todo: try changing time to uint16_t (you'll need to use relative time), try changing time to be synced to clock pulses (byte/uint8_t).
-//add LED that blinks when we try to add a note to a full events buffer (or just is on when the events buffer is full?)
-//change more ints to bytes?
-//todo: config mode?  Maybe not necessary with current setup -- actually, not doable until I get the teensy.
-//todo: consider updating display to reflect changes to pulseResolution?
-//todo: I don't like that panic displays panic and then to get back to a normal display I have to re-set drum or synth assignments via the buttons+dipswitches.  Though maybe that's okay.
-//todo: create a "hold display" button that lets me have some message show for 2 seconds or whatever then go back to whatever I want my default to be
+
+//todo: try changing time to uint16_t (you'll need to use relative time), try changing time to be synced to clock pulses (byte/uint8_t).//todo: consider updating display to reflect changes to pulseResolution?
 //todo: it's kind of cool when I lower the events buffer way low and loop off of that, maybe make that something you can turn on/off
 //todo: Figure out how I want to handle drum note numbers (for equivalent to jitter).  Could assign them per channel and "know" some like the dbi's, could also "learn" them per-channel (could get memory heavy)
 //todo: update code to use the createOffNote() function where appropraite
 //todo: Retrigger OPTIONALLY affecting synths, only affecting drums
-//todo: update buttons to use ButtonHelper  
-//todo: temporarily make the menu options set by physical switches. 
 //todo: MAYBE add a second events buffer that *does* track events while stuttering. When we stutter,
 //we dump the contents of "tracker buffer" into stutter events buffer and keep tracking notes as normal.
 //will require significant rewriting. 
@@ -67,8 +33,12 @@ channel to off and updating.  There's nuance here though-- the stuttered notes w
 //only happens on notes whose time it is to be played, not on every loop.
 //TODO: add full reversal.  WIll require changing reference in playedSavedPulses to use a copy of the event,
 //but make sure we're still updating played correctly.  
-//TODO: percolation needs note off handling added.  This is basically already solved in retrigger.
+//TODO: percolation needs note off handling added.  This is basically already solved in retrigger but it kind of sucks to do.
 //TODO: percolation seems to degenerate, like it gets stuck to a certain note.  Maybe it's not undoing its buffer or something. Maybe it *is* editing notes in place. 
+//TODO: maybe make a menu option that lets you set the "default" status screen to be the channel matrix vs stretch. 
+//kind of depends on if I end up removing the 7seg.
+//I could leave the 7seg and have the status show a 400 cell grid filling up left to right, top to bottom as you twist the pot
+//TODO: try, it might not work well, but try having the SD matrix cells flash when notes come in?
 
 #include <EEPROM.h>
 
@@ -330,18 +300,11 @@ MatrixKeypad keypad;
 #define ACTIVE_NOTES_DEBUG
 #define PLAYBACK
 
-//Serial comms with nano
-// #include "rx_message_handling.h"
-// ParsedMessage msg;
+
 
 //tempo tracker stuff
 #include "Tempo_Tracker.h"
 TempoTracker tempoTracker;
-
-
-//buttons using helper
-// ButtonHelper playButton;
-// const int playPin = 13;
 
 
 const int logButtonPin = 8;
@@ -364,20 +327,14 @@ const byte BUFFER_FULL_LED_BLINK_TIME = 20;
 const byte BUFFER_FULL_LED_BLINK_COUNT = 4; //needs to be twice the number of blinks
 
 const float MIN_STRETCH_INTERVAL_UPDATE = 200;
+
+//this is used in a hypothetical drum machine helper for jittering between instruments
 const int MAX_INSTRUMENTS = 16;
 
-//TODO: Set scale based on dipswitches, including "no scale" as option
-//TODO: Note glitch always or just when stuttering? Let's go with always for now?
-//TODO: turn off octave switching... as an indepdent thing? or just when NO_OFFSETS is selected?
-//TODO: Maybe don't always have 0 octave glitching as an option?
-//TODO: We shouldn't be doing +/-2 notes, we should do +2 notes or +2-12=-10 notes.
-
-// const byte DRUM_NUMBERS[] = {};
-
-const byte JITTER_BUFFER_SIZE = 64;
+const byte JITTER_BUFFER_SIZE = 128;
 
 const byte RERETRIGGER_PROB = 50;
-const byte RETRIGGER_BUFFER_SIZE = 32;
+const byte RETRIGGER_BUFFER_SIZE = 64;
 // const byte RETRIGGER_TIME = 50; // could do min/max if we wanted to. This is the delay time between ntoes
 const byte RETRIGGER_TIME = 100; //todo: make this different for drums and synths? 50 is fine for drums, too fast for synths.
 const byte RETRIGGER_NOTE_LENGTH = 50; //doesn't matter for drums, might for samples, does for synth
@@ -386,11 +343,11 @@ const byte PITCHBEND_PROB_1000000000 = 3; //note: this is x/a billion not x/100 
 const byte NUM_ACTIVE_PITCHBENDS = 4;
 const bool PITCHBEND_ACTIVE = true;
 
-byte STUTTER_TEMPERATURE = 0; //this is used to randomly rearrange/resample notes during stutter, keeping the timing the same. 
-//this is currently NOT channel specific, which will be interesting. 
+// byte STUTTER_TEMPERATURE = 0; //this is used to randomly rearrange/resample notes during stutter, keeping the timing the same. 
+//this is currently NOT channel specific, which will be interesting. It does ensure that only synths are considered though.
+//this is because most note numbers for a given drum machine will be silent/empty.
 
-//working pulse resolution size, we start with a quarter note (max pulses per stutter)
-// Now set by menu.pulseResolution
+
 // --- LED Pins ---
 const int bufferLedPin = 9; 
 
@@ -398,11 +355,6 @@ const int bufferLedPin = 9;
 const int stutterButtonPin = 2;
 const int panicButtonPin = 3;
 ButtonHelper panicButton;
-
-// --- "Scale"/Offset dipswitch pins
-const int onesOffsetPin = 11;
-const int twosOffsetPin = 20;
-const int foursOffsetPin = 12;
 
 // --- Potentiometer Pins ---
 int stretchPotPin = A17;
@@ -424,6 +376,7 @@ struct JitteredNote {
   byte channel;
 };
 
+//hypothetical used for percolation, for note-off events primarily.
 struct PercNote {
   byte originalNote;
   byte newNote;
@@ -545,7 +498,12 @@ bool stutterButtonPressed = false;
 bool prevStutterPressed = false;
 
 // --- Dipswitch states ---
-
+//these encode the midi dipswitch states
+// uint16_t oldDrumState = 0;
+uint16_t oldSynthState = 0;
+uint16_t newSynthState = 0;
+uint16_t oldDrumState = 0;
+uint16_t newDrumState = 0;
 
 
 // --- Pot States --- 
@@ -554,13 +512,6 @@ float stretchPotValueFloat = 0;
 float stretchValue = 1.0;
 float oldStretchValue = 1.0;
 float lastTimeStretchPotUpdated = 0;
-
-//these encode the midi dipswitch states
-// uint16_t oldDrumState = 0;
-uint16_t oldSynthState = 0;
-uint16_t newSynthState = 0;
-uint16_t oldDrumState = 0;
-uint16_t newDrumState = 0;
 
 
 //loop control states
@@ -604,6 +555,8 @@ const uint8_t midiPins[16] = {
 
 //todo: switch this to the two arrays below and a check on those.
 //these are stored in eeprom, so this only matters if EEPROM fails.
+//specifically, these are the defaults used in the "memory failed" and "reset to defaults"
+//code.  These arrays aren't directly called though, but we should refactor so that they are.
 bool drumMIDIenabled[16]  = {
   false, false, false, false,
   false, false, false, false,
@@ -618,6 +571,8 @@ bool synthMIDIenabled[16]=  {
 };
 
 
+//note that active notes tracking for 256 has been solved by isolating the MIDI in, but it's still
+//useful to have.
 #ifdef ACTIVE_NOTES_DEBUG
 //debug stuff
 const int MAX_NOTES = 256;
@@ -626,14 +581,15 @@ bool activeNotes[MAX_NOTES] = { false };
 #endif
 
 // --- Menu States ---
-bool retriggerOn = false; //todo: add to menu
-bool synthJitterOn = false; //todo: add to menu
+//these two are set by button-switches. We'll keep it like that. 
+bool retriggerOn = false; 
+bool synthJitterOn = false; 
 const int retriggerSwitchPin = 40;
 const int synthJitterSwitchPin = 39;
 SwitchHelper retriggerSwitch;
 SwitchHelper synthJitterSwitch;
 
-byte octaveShiftOption = 0;
+byte octaveShiftOption = 0; //todo: implement
 /*
 Octave shift options: 
   0: No Octave Shift
@@ -923,8 +879,11 @@ void setup() {
   menu.menuBActiveIdx = EEPROM.read(EEPROM_ADDR_MENUB);
   menu.noteJitterProb = EEPROM.read(EEPROM_ADDR_JITTER_PROB);
   menu.retriggerProb = EEPROM.read(EEPROM_ADDR_RETRIGGER_PROB);
+  menu.stutterTemperature = EEPROM.read(EEPROM_ADDR_STUTTER_TEMPERATURE);
   Serial.print("Loaded noteJitterProb from EEPROM: ");
   Serial.println(menu.noteJitterProb);
+  Serial.print("Loaded stutterTemperature from EEPROM: ");
+  Serial.println(menu.stutterTemperature);
   Serial.println("EEPROM states and menu settings loaded");
   } else {
     Serial.println("EEPROM magic byte not found, using defaults");
@@ -946,16 +905,18 @@ void setup() {
     menu.menuBActiveIdx = 1;
     menu.noteJitterProb = 0;
     menu.retriggerProb = 10;
-  // Immediately save defaults to EEPROM so future boots load correct values
-  EEPROM.write(EEPROM_ADDR_MAGIC, EEPROM_MAGIC);
-  EEPROM.put(EEPROM_ADDR_DRUM_STATE, drumState);
-  EEPROM.put(EEPROM_ADDR_SYNTH_STATE, synthState);
-  menu.saveStutterLength(EEPROM_ADDR_STUTTER_LENGTH);
-  menu.saveOffset(EEPROM_ADDR_OFFSET);
-  menu.saveMenu1(EEPROM_ADDR_MENU1);
-  menu.saveMenuB(EEPROM_ADDR_MENUB);
-  menu.saveNoteJitterProb(EEPROM_ADDR_JITTER_PROB);
-  menu.saveRetriggerProb(EEPROM_ADDR_RETRIGGER_PROB);
+    menu.stutterTemperature = 0;
+    // Immediately save defaults to EEPROM so future boots load correct values
+    EEPROM.write(EEPROM_ADDR_MAGIC, EEPROM_MAGIC);
+    EEPROM.put(EEPROM_ADDR_DRUM_STATE, drumState);
+    EEPROM.put(EEPROM_ADDR_SYNTH_STATE, synthState);
+    menu.saveStutterLength(EEPROM_ADDR_STUTTER_LENGTH);
+    menu.saveOffset(EEPROM_ADDR_OFFSET);
+    menu.saveMenu1(EEPROM_ADDR_MENU1);
+    menu.saveMenuB(EEPROM_ADDR_MENUB);
+    menu.saveNoteJitterProb(EEPROM_ADDR_JITTER_PROB);
+    menu.saveRetriggerProb(EEPROM_ADDR_RETRIGGER_PROB);
+    menu.saveStutterTemperature(EEPROM_ADDR_STUTTER_TEMPERATURE);
   }
 
 
@@ -1005,6 +966,11 @@ void loop() {
         break;
       case RETRIGGER_PROB_MENU:
         menu.handleRetriggerKeypad(keypad.lastKeyPressed);
+        menu.render();
+        keypad.lastKeyPressed = 0;
+        break;
+      case STUTTER_TEMPERATURE_MENU:
+        menu.handleStutterTemperatureKeypad(keypad.lastKeyPressed);
         menu.render();
         keypad.lastKeyPressed = 0;
         break;
@@ -1509,7 +1475,7 @@ void playSavedPulses() {
       // Serial.println(event.velocity);
 
       //if STUTTER_TEMPERATURE>0, we maybe percolate the note
-      if(STUTTER_TEMPERATURE>0){
+      if(menu.stutterTemperature>0){
         event = maybePercolateNote(event, i);
       }
 
@@ -1860,7 +1826,7 @@ MidiEvent maybePercolateNote(MidiEvent event, byte index_number){
 
   //only do this for note on events for now (TODO: eugh, going to have to change note offs)
   if(event.type == midi::NoteOn && synthMIDIenabled[event.channel - 1]){
-    int random_step_count = random(0, STUTTER_TEMPERATURE);
+    int random_step_count = random(0, menu.stutterTemperature);
     //50/50 chance of going up or down
     int8_t direction;
     if(randomProbResult(50)){

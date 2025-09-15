@@ -11,7 +11,8 @@ enum MenuState {
     RETRIGGER_PROB_MENU,
     CHANNEL_CONFIG_MENU,
     STUTTER_LENGTH_MENU,
-    OFFSET_MENU
+    OFFSET_MENU,
+    STUTTER_TEMPERATURE_MENU
 };
 // Offset sets and labels
 struct OffsetSet {
@@ -68,6 +69,7 @@ public:
     void handleInput(MenuButton btn);
     void handleJitterKeypad(char key); // For NOTE_JITTER_PROB_MENU
     void handleRetriggerKeypad(char key); // For RETRIGGER_PROB_MENU
+    void handleStutterTemperatureKeypad(char key); // For STUTTER_TEMPERATURE_MENU
     MenuState currentMenu;
     // Flag for requesting channel defaults reset
     bool pendingChannelDefaultsReset = false;
@@ -80,6 +82,7 @@ public:
     void saveMenuB(int eepromAddr);
     void saveNoteJitterProb(int eepromAddr);
     void saveRetriggerProb(int eepromAddr);
+    void saveStutterTemperature(int eepromAddr);
 public:
     Adafruit_ST7789& tft;
     // Main menu selection
@@ -102,6 +105,9 @@ public:
     int noteJitterProb = 0;
     String retriggerInputBuffer = "";
     int retriggerProb = 10;
+    // Stutter Temperature menu
+    String stutterTemperatureInputBuffer = "";
+    int stutterTemperature = 0;
     // No selection index needed; only '...' is selectable
     // Stutter Length menu selection
     int stutterLengthSelectedIdx = 0; // 0 = '...', 1-16 = options

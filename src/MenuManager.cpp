@@ -1,3 +1,7 @@
+
+
+
+
 // Save menu settings to EEPROM
 #include <EEPROM.h>
 #include "MenuManager.h"
@@ -34,6 +38,10 @@ void MenuManager::saveRetriggerProb(int eepromAddr) {
     EEPROM.write(eepromAddr, retriggerProb);
 }
 
+void MenuManager::saveStutterTemperature(int eepromAddr) {
+    EEPROM.write(EEPROM_ADDR_MAGIC, EEPROM_MAGIC);
+    EEPROM.write(eepromAddr, stutterTemperature);
+}
 
 
 MenuManager::MenuManager(Adafruit_ST7789& display) : tft(display), currentMenu(MAIN_MENU) {
@@ -72,6 +80,7 @@ void MenuManager::handleInput(MenuButton btn) {
         channelConfigScrollIdx = scrollIdx;
         return;
     }
+    //todo: consolidate these into the switch statement below
     // Jitter menu: only '...' is selectable, select returns to main menu
     if (currentMenu == NOTE_JITTER_PROB_MENU) {
         if (btn == BUTTON_SELECT) {
@@ -88,9 +97,17 @@ void MenuManager::handleInput(MenuButton btn) {
         // Up/down do nothing
         return;
     }
+        // Stutter temperature menu: only '...' is selectable, select returns to main menu
+    if (currentMenu == STUTTER_TEMPERATURE_MENU) {
+        if (btn == BUTTON_SELECT) {
+            currentMenu = MAIN_MENU;
+        }
+        // Up/down do nothing
+        return;
+    }
     switch (currentMenu) {
         case MAIN_MENU: {
-            // Now 7 items: Menu 1, Menu 2, Note Jitter Prob, Retrigger Prob, Channel Config, Stutter Length, Offset/Scale
+            // Now 8 items: Menu 1, Menu 2, Note Jitter Prob, Retrigger Prob, Stutter Temperature, Channel Config, Stutter Length, Offset/Scale
             if (btn == BUTTON_UP) {
                 if (mainMenuSelectedIdx > 0) {
                     mainMenuSelectedIdx--;
@@ -99,7 +116,7 @@ void MenuManager::handleInput(MenuButton btn) {
                     }
                 }
             } else if (btn == BUTTON_DOWN) {
-                if (mainMenuSelectedIdx < 6) {
+                if (mainMenuSelectedIdx < 7) {
                     mainMenuSelectedIdx++;
                     if (mainMenuSelectedIdx > mainMenuScrollIdx + MAIN_MENU_VISIBLE_ITEMS - 1) {
                         mainMenuScrollIdx = mainMenuSelectedIdx - MAIN_MENU_VISIBLE_ITEMS + 1;
@@ -121,13 +138,16 @@ void MenuManager::handleInput(MenuButton btn) {
                     currentMenu = RETRIGGER_PROB_MENU;
                     retriggerInputBuffer = String(retriggerProb);
                 } else if (mainMenuSelectedIdx == 4) {
+                    currentMenu = STUTTER_TEMPERATURE_MENU;
+                    stutterTemperatureInputBuffer = String(stutterTemperature);
+                } else if (mainMenuSelectedIdx == 5) {
                     currentMenu = CHANNEL_CONFIG_MENU;
                     channelConfigSelectedIdx = 0;
-                } else if (mainMenuSelectedIdx == 5) {
+                } else if (mainMenuSelectedIdx == 6) {
                     currentMenu = STUTTER_LENGTH_MENU;
                     stutterLengthSelectedIdx = 0;
                     stutterLengthScrollIdx = 0;
-                } else if (mainMenuSelectedIdx == 6) {
+                } else if (mainMenuSelectedIdx == 7) {
                     currentMenu = OFFSET_MENU;
                     offsetSelectedIdx = 0;
                     offsetScrollIdx = 0;
@@ -289,10 +309,31 @@ void MenuManager::handleRetriggerKeypad(char key) {
     // Ignore other keys
 }
 
+// Call this from loop() when in STUTTER_TEMPERATURE_MENU
+void MenuManager::handleStutterTemperatureKeypad(char key) {
+    if (currentMenu != STUTTER_TEMPERATURE_MENU) return;
+    static bool inputLocked = false;
+    if (key == '*') {
+        stutterTemperatureInputBuffer = "";
+        inputLocked = false;
+    } else if (key == '#') {
+        int val = stutterTemperatureInputBuffer.toInt();
+        stutterTemperature = val;
+        saveStutterTemperature(EEPROM_ADDR_STUTTER_TEMPERATURE);
+        stutterTemperatureInputBuffer = String(val); // Show value
+        inputLocked = true;
+    } else if (key >= '0' && key <= '9') {
+        if (!inputLocked && stutterTemperatureInputBuffer.length() < 3) {
+            stutterTemperatureInputBuffer += key;
+        }
+    }
+    // Ignore other keys
+}
+
 void MenuManager::render() {
     if (currentMenu == MAIN_MENU) {
         // Main menu: list of menus
-        const char* menus[7] = {"Menu 1", "Menu 2", "Note Jitter Prob", "Retrigger Prob", "Channel Config", "Stutter Length", "Offset/Scale"};
+    const char* menus[8] = {"Menu 1", "Menu 2", "Note Jitter Prob", "Retrigger Prob", "Temperature", "Channel Config", "Stutter Length", "Offset/Scale"};
         int yStart = 10;
         tft.setTextSize(2);
         tft.setCursor(10, yStart);
@@ -301,7 +342,7 @@ void MenuManager::render() {
         tft.print("Main Menu");
         int itemIdx = mainMenuScrollIdx;
         int y = yStart;
-        for (int visible = 0; visible < MAIN_MENU_VISIBLE_ITEMS && itemIdx < 7; ++visible, ++itemIdx) {
+        for (int visible = 0; visible < MAIN_MENU_VISIBLE_ITEMS && itemIdx < 8; ++visible, ++itemIdx) {
             tft.setCursor(20, y + 30);
             if (mainMenuSelectedIdx == itemIdx) {
                 tft.setTextColor(ST77XX_BLACK, ST77XX_WHITE);
@@ -490,6 +531,35 @@ void MenuManager::render() {
         tft.setTextColor(ST77XX_CYAN, ST77XX_BLACK);
         if (jitterInputBuffer.length() > 0) {
             tft.print(jitterInputBuffer);
+        } else {
+            tft.print("0");
+        }
+
+        // Instructions at bottom
+        tft.setTextSize(1);
+        tft.setTextColor(ST77XX_YELLOW);
+        tft.setCursor(10, 120);
+        tft.print("press # when done, press * to restart");
+    } else if (currentMenu == STUTTER_TEMPERATURE_MENU) {
+        tft.fillScreen(ST77XX_BLACK);
+        // Title at top
+        tft.setTextSize(2);
+        tft.setTextColor(ST77XX_WHITE);
+        tft.setCursor(10, 10);
+        tft.print("temperature");
+
+        // '...' at top, always highlighted
+        tft.setTextSize(2);
+        tft.setCursor(10, 40);
+        tft.setTextColor(ST77XX_BLACK, ST77XX_WHITE);
+        tft.print("...");
+
+        // Number in middle, always cyan
+        tft.setTextSize(3);
+        tft.setCursor(40, 80);
+        tft.setTextColor(ST77XX_CYAN, ST77XX_BLACK);
+        if (stutterTemperatureInputBuffer.length() > 0) {
+            tft.print(stutterTemperatureInputBuffer);
         } else {
             tft.print("0");
         }

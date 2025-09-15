@@ -1,6 +1,6 @@
 #pragma once
 //EEPROM magic number to indicate valid stored settings
-#define EEPROM_MAGIC 0x03
+#define EEPROM_MAGIC 0x04
 
 // EEPROM address constants for all menu settings and states
 #define EEPROM_ADDR_MAGIC          0
@@ -12,3 +12,4 @@
 #define EEPROM_ADDR_MENUB          36
 #define EEPROM_ADDR_JITTER_PROB    37
 #define EEPROM_ADDR_RETRIGGER_PROB 38
+#define EEPROM_ADDR_STUTTER_TEMPERATURE 39
