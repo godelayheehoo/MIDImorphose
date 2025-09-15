@@ -39,7 +39,8 @@ channel to off and updating.  There's nuance here though-- the stuttered notes w
 //kind of depends on if I end up removing the 7seg.
 //I could leave the 7seg and have the status show a 400 cell grid filling up left to right, top to bottom as you twist the pot
 //TODO: try, it might not work well, but try having the SD matrix cells flash when notes come in?
-
+//TODO: add a menu option to decide if percolation requires same-channel notes.  
+//TODO: Submenus.
 #include <EEPROM.h>
 
 
@@ -720,6 +721,10 @@ byte randomOctave() {
   return 0;                        // 0–59 → 60%
 }
 
+void handleClock() {
+    MIDI.sendRealTime(midi::Clock);
+}
+
 
 //function prototypes
 void playSavedPulses();
@@ -731,7 +736,7 @@ void clearOldNotes(int expiredPulse);
 
 MidiEvent createEmptyEvent(byte pulseNumber);
 
-void handleClock();
+void manglerHandleClock();
 
 void triggerBufferFullBlink();
 void updateBufferFullBlink();
@@ -808,6 +813,7 @@ void setup() {
   Serial.println(F("Turning on MIDI"));
   MIDI.begin(MIDI_CHANNEL_OMNI);
   MIDI.turnThruOff();
+  MIDI.setHandleClock(handleClock);
 
 
    //setup midi channels -- edit later for S&D arrays. This uses mcp pins
@@ -1221,7 +1227,7 @@ else{
 
         //we "handle the clock, which JUST means rotating out the eventsBuffers, only if we're not looping. If not looping, no new notes get appended anyway.
         if(!isLooping){
-        handleClock();
+        manglerHandleClock();
         }
       }
       //non-clock handling
@@ -1538,7 +1544,7 @@ MidiEvent createEmptyEvent(byte pulseNumber) {
 }
 
 
-void handleClock() {
+void manglerHandleClock() {
   currentPulse = (currentPulse + 1) % menu.pulseResolution;
   // Serial.println(currentPulse);
   clearOldNotes(currentPulse);
@@ -1551,7 +1557,6 @@ void handleClock() {
   pulseStartTimes.push(pulseTime);
   tempoTracker.addPulse(pulseTime);
   tempoTracker.calculateBPM();
-  MIDI.sendRealTime(midi::Clock);
 }
 
 
