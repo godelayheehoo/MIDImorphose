@@ -529,6 +529,7 @@ unsigned long lastStutterChange = 0;
 unsigned long lastButtonChangeTime = 0;
 MidiEvent dummyEvent;
 unsigned long dummyTime;
+int numSynthNoteOnsInEventsBuffer;
 // bool MIDIPlayState = true; //NOTE: This MAY be reversed from what it technically says!  We won't actually know if it's started or stopped when we start the arduino.
 //TODO: figure out why this isn't working.
 //midi channels
@@ -1152,10 +1153,13 @@ if (panicButton.update()) {
     // Serial.print("set loopStartTime to:");
     // Serial.println(loopStartTime);
     isLooping = true;
-        //debug
-    // Serial.print("<<<<<<<<NEW STUTTER: pst:");
-    // Serial.print(playbackStartTime);
-    // Serial.println(">>>>>>>>>>>>>>");
+    
+    numSynthNoteOnsInEventsBuffer = 0;
+    for(int i =0; i<eventsBuffer.size(); i++){
+      if(eventsBuffer[i].type==midi::NoteOn && synthMIDIenabled[eventsBuffer[i].channel-1]){
+        numSynthNoteOnsInEventsBuffer++;
+      }
+    }
   }
 
   ///stutter button is released
@@ -1475,11 +1479,12 @@ void playSavedPulses() {
       // Serial.println(event.velocity);
 
       //if STUTTER_TEMPERATURE>0, we maybe percolate the note
+      MidiEvent maybeNewEvent = event;
       if(menu.stutterTemperature>0){
-        event = maybePercolateNote(event, i);
+        maybeNewEvent = maybePercolateNote(event, i);
       }
 
-      forwardNote(event);
+      forwardNote(maybeNewEvent);
     }
   }
 }
@@ -1827,7 +1832,11 @@ MidiEvent maybePercolateNote(MidiEvent event, byte index_number){
   //only do this for note on events for now (TODO: eugh, going to have to change note offs)
   if(event.type == midi::NoteOn && synthMIDIenabled[event.channel - 1]){
     int random_step_count = random(0, menu.stutterTemperature);
-    //50/50 chance of going up or down
+    //cap random_step_count to numSynthNoteOnsInEventsBuffer-1  . Use mod for more variatoin. 
+    if(random_step_count >= numSynthNoteOnsInEventsBuffer) {
+      random_step_count = random_step_count % numSynthNoteOnsInEventsBuffer;
+    }
+     //50/50 chance of going up or down
     int8_t direction;
     if(randomProbResult(50)){
       direction = 1;
