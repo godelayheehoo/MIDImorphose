@@ -1,3 +1,5 @@
+
+
 // Save menu settings to EEPROM
 #include <EEPROM.h>
 #include "MenuManager.h"
@@ -27,6 +29,13 @@ void MenuManager::saveNoteJitterProb(int eepromAddr) {
     EEPROM.write(eepromAddr, noteJitterProb);
     Serial.print("saveNoteJitterProb called, value: ");
     Serial.println(noteJitterProb);
+}
+
+void MenuManager::saveDrumJitterProb(int eepromAddr) {
+    EEPROM.write(EEPROM_ADDR_MAGIC, EEPROM_MAGIC);
+    EEPROM.write(eepromAddr, drumJitterProb);
+    Serial.print("saveDrumJitterProb called, value: ");
+    Serial.println(drumJitterProb);
 }
 
 void MenuManager::saveRetriggerProb(int eepromAddr) {
@@ -91,6 +100,14 @@ void MenuManager::handleInput(MenuButton btn) {
         // Up/down do nothing
         return;
     }
+    // Drum Jitter menu: only '...' is selectable, select returns to main menu
+    if (currentMenu == DRUM_JITTER_PROB_MENU) {
+        if (btn == BUTTON_SELECT) {
+            currentMenu = MAIN_MENU;
+        }
+        // Up/down do nothing
+        return;
+    }
     // Retrigger menu: only '...' is selectable, select returns to main menu
     if (currentMenu == RETRIGGER_PROB_MENU) {
         if (btn == BUTTON_SELECT) {
@@ -128,7 +145,7 @@ void MenuManager::handleInput(MenuButton btn) {
     }
     switch (currentMenu) {
         case MAIN_MENU: {
-            // Now 9 items: Menu 1, Menu 2, Note Jitter Prob, Retrigger Prob, Stutter Temperature, Channel Config, Stutter Length, Offset/Scale, Retrigger Synth
+            // Now 10 items: Menu 1, Menu 2, Note Jitter Prob, Drum Jitter Prob, Retrigger Prob, Stutter Temperature, Channel Config, Stutter Length, Offset/Scale, Retrigger Synth
             if (btn == BUTTON_UP) {
                 if (mainMenuSelectedIdx > 0) {
                     mainMenuSelectedIdx--;
@@ -137,7 +154,7 @@ void MenuManager::handleInput(MenuButton btn) {
                     }
                 }
             } else if (btn == BUTTON_DOWN) {
-                if (mainMenuSelectedIdx < 8) {
+                if (mainMenuSelectedIdx < 9) {
                     mainMenuSelectedIdx++;
                     if (mainMenuSelectedIdx > mainMenuScrollIdx + MAIN_MENU_VISIBLE_ITEMS - 1) {
                         mainMenuScrollIdx = mainMenuSelectedIdx - MAIN_MENU_VISIBLE_ITEMS + 1;
@@ -156,23 +173,26 @@ void MenuManager::handleInput(MenuButton btn) {
                     currentMenu = NOTE_JITTER_PROB_MENU;
                     jitterInputBuffer = String(noteJitterProb);
                 } else if (mainMenuSelectedIdx == 3) {
+                    currentMenu = DRUM_JITTER_PROB_MENU;
+                    drumJitterInputBuffer = String(drumJitterProb);
+                } else if (mainMenuSelectedIdx == 4) {
                     currentMenu = RETRIGGER_PROB_MENU;
                     retriggerInputBuffer = String(retriggerProb);
-                } else if (mainMenuSelectedIdx == 4) {
+                } else if (mainMenuSelectedIdx == 5) {
                     currentMenu = STUTTER_TEMPERATURE_MENU;
                     stutterTemperatureInputBuffer = String(stutterTemperature);
-                } else if (mainMenuSelectedIdx == 5) {
+                } else if (mainMenuSelectedIdx == 6) {
                     currentMenu = CHANNEL_CONFIG_MENU;
                     channelConfigSelectedIdx = 0;
-                } else if (mainMenuSelectedIdx == 6) {
+                } else if (mainMenuSelectedIdx == 7) {
                     currentMenu = STUTTER_LENGTH_MENU;
                     stutterLengthSelectedIdx = 0;
                     stutterLengthScrollIdx = 0;
-                } else if (mainMenuSelectedIdx == 7) {
+                } else if (mainMenuSelectedIdx == 8) {
                     currentMenu = OFFSET_MENU;
                     offsetSelectedIdx = 0;
                     offsetScrollIdx = 0;
-                } else if (mainMenuSelectedIdx == 8) {
+                } else if (mainMenuSelectedIdx == 9) {
                     currentMenu = RETRIGGER_SYNTH_MENU;
                     retriggerSynthSelectedIdx = 0;
                 }
@@ -311,6 +331,27 @@ void MenuManager::handleJitterKeypad(char key) {
     // Ignore other keys
 }
 
+void MenuManager::handleDrumJitterKeypad(char key) {
+    if (currentMenu != DRUM_JITTER_PROB_MENU) return;
+    static bool inputLocked = false;
+    if (key == '*') {
+        drumJitterInputBuffer = "";
+        inputLocked = false;
+    } else if (key == '#') {
+        int val = drumJitterInputBuffer.toInt();
+        if (val > 100) val = 100;
+        drumJitterProb = val;
+        saveDrumJitterProb(EEPROM_ADDR_DRUM_JITTER_PROB);
+        drumJitterInputBuffer = String(val); // Show clamped value
+        inputLocked = true;
+    } else if (key >= '0' && key <= '9') {
+        if (!inputLocked && drumJitterInputBuffer.length() < 3) {
+            drumJitterInputBuffer += key;
+        }
+    }
+    // Ignore other keys
+}
+
 // Call this from loop() when in RETRIGGER_PROB_MENU
 void MenuManager::handleRetriggerKeypad(char key) {
     if (currentMenu != RETRIGGER_PROB_MENU) return;
@@ -357,7 +398,8 @@ void MenuManager::handleStutterTemperatureKeypad(char key) {
 void MenuManager::render() {
     if (currentMenu == MAIN_MENU) {
         // Main menu: list of menus
-    const char* menus[9] = {"Menu 1", "Menu 2", "Note Jitter Prob", "Retrigger Prob", "StutterTemperature", "Channel Config", "Stutter Length", "Offset/Scale", "Retrigger Synth"};
+        // Insert Drum Jitter Prob after Note Jitter Prob
+        const char* menus[10] = {"Menu 1", "Menu 2", "Note Jitter Prob", "Drum Jitter Prob", "Retrigger Prob", "StutterTemperature", "Channel Config", "Stutter Length", "Offset/Scale", "Retrigger Synth"};
         int yStart = 10;
         tft.setTextSize(2);
         tft.setCursor(10, yStart);
@@ -367,7 +409,7 @@ void MenuManager::render() {
         // Main menu labels
         int itemIdx = mainMenuScrollIdx;
         int y = yStart;
-        for (int visible = 0; visible < MAIN_MENU_VISIBLE_ITEMS && itemIdx < 9; ++visible, ++itemIdx) {
+        for (int visible = 0; visible < MAIN_MENU_VISIBLE_ITEMS && itemIdx < 10; ++visible, ++itemIdx) {
             tft.setCursor(20, y + 30);
             if (mainMenuSelectedIdx == itemIdx) {
                 tft.setTextColor(ST77XX_BLACK, ST77XX_WHITE);
@@ -378,7 +420,36 @@ void MenuManager::render() {
             y += 30;
         }
         tft.setTextColor(ST77XX_WHITE);
-    } else if (currentMenu == RETRIGGER_SYNTH_MENU) {
+    } else if (currentMenu == DRUM_JITTER_PROB_MENU) {
+        tft.fillScreen(ST77XX_BLACK);
+        // Title at top
+        tft.setTextSize(2);
+        tft.setTextColor(ST77XX_WHITE);
+        tft.setCursor(10, 10);
+        tft.print("drum jitter prob");
+
+        // '...' at top, always highlighted
+        tft.setTextSize(2);
+        tft.setCursor(10, 40);
+        tft.setTextColor(ST77XX_BLACK, ST77XX_WHITE);
+        tft.print("...");
+
+        // Number in middle, always cyan
+        tft.setTextSize(3);
+        tft.setCursor(40, 80);
+        tft.setTextColor(ST77XX_CYAN, ST77XX_BLACK);
+        if (drumJitterInputBuffer.length() > 0) {
+            tft.print(drumJitterInputBuffer);
+        } else {
+            tft.print("0");
+        }
+
+        // Instructions at bottom
+        tft.setTextSize(1);
+        tft.setTextColor(ST77XX_YELLOW);
+        tft.setCursor(10, 120);
+        tft.print("press # when done, press * to restart");
+    } else if (currentMenu == NOTE_JITTER_PROB_MENU) {
         tft.fillScreen(ST77XX_BLACK);
         tft.setTextSize(2);
         tft.setTextColor(ST77XX_WHITE);

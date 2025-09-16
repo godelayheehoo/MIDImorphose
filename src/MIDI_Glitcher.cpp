@@ -928,6 +928,7 @@ void setup() {
   menu.menu1ActiveIdx = EEPROM.read(EEPROM_ADDR_MENU1);
   menu.menuBActiveIdx = EEPROM.read(EEPROM_ADDR_MENUB);
   menu.noteJitterProb = EEPROM.read(EEPROM_ADDR_JITTER_PROB);
+  menu.drumJitterProb = EEPROM.read(EEPROM_ADDR_DRUM_JITTER_PROB);
   menu.retriggerProb = EEPROM.read(EEPROM_ADDR_RETRIGGER_PROB);
   menu.stutterTemperature = EEPROM.read(EEPROM_ADDR_STUTTER_TEMPERATURE);
   menu.retriggerSynths = EEPROM.read(EEPROM_ADDR_SYNTH_RETRIGGER);
@@ -952,26 +953,28 @@ void setup() {
       if (synthDefaults[i]) synthState |= (1 << i);
     }
     // Set menu defaults
-    menu.stutterLengthActiveIdx = 9; // 1/4 note
-    menu.offsetActiveIdx = 1; // Any Offset
-    menu.menu1ActiveIdx = 1;
-    menu.menuBActiveIdx = 1;
-    menu.noteJitterProb = 0;
-    menu.retriggerProb = 10;
-    menu.stutterTemperature = 0;
-    menu.retriggerSynths = false;
+  menu.stutterLengthActiveIdx = 9; // 1/4 note
+  menu.offsetActiveIdx = 1; // Any Offset
+  menu.menu1ActiveIdx = 1;
+  menu.menuBActiveIdx = 1;
+  menu.noteJitterProb = 0;
+  menu.drumJitterProb = 0;
+  menu.retriggerProb = 10;
+  menu.stutterTemperature = 0;
+  menu.retriggerSynths = false;
     // Immediately save defaults to EEPROM so future boots load correct values
     EEPROM.write(EEPROM_ADDR_MAGIC, EEPROM_MAGIC);
     EEPROM.put(EEPROM_ADDR_DRUM_STATE, drumState);
     EEPROM.put(EEPROM_ADDR_SYNTH_STATE, synthState);
-    menu.saveStutterLength(EEPROM_ADDR_STUTTER_LENGTH);
-    menu.saveOffset(EEPROM_ADDR_OFFSET);
-    menu.saveMenu1(EEPROM_ADDR_MENU1);
-    menu.saveMenuB(EEPROM_ADDR_MENUB);
-    menu.saveNoteJitterProb(EEPROM_ADDR_JITTER_PROB);
-    menu.saveRetriggerProb(EEPROM_ADDR_RETRIGGER_PROB);
-    menu.saveStutterTemperature(EEPROM_ADDR_STUTTER_TEMPERATURE);
-    menu.saveSynthRetrigger(EEPROM_ADDR_SYNTH_RETRIGGER);
+  menu.saveStutterLength(EEPROM_ADDR_STUTTER_LENGTH);
+  menu.saveOffset(EEPROM_ADDR_OFFSET);
+  menu.saveMenu1(EEPROM_ADDR_MENU1);
+  menu.saveMenuB(EEPROM_ADDR_MENUB);
+  menu.saveNoteJitterProb(EEPROM_ADDR_JITTER_PROB);
+  menu.saveDrumJitterProb(EEPROM_ADDR_DRUM_JITTER_PROB);
+  menu.saveRetriggerProb(EEPROM_ADDR_RETRIGGER_PROB);
+  menu.saveStutterTemperature(EEPROM_ADDR_STUTTER_TEMPERATURE);
+  menu.saveSynthRetrigger(EEPROM_ADDR_SYNTH_RETRIGGER);
 
     //create drum machines on startup. TODO: functionality to relearn drum machines when we update
     //drumMachineMIDIEnabled
@@ -1021,6 +1024,11 @@ void loop() {
     switch (menu.currentMenu) {
       case NOTE_JITTER_PROB_MENU:
         menu.handleJitterKeypad(keypad.lastKeyPressed);
+        menu.render();
+        keypad.lastKeyPressed = 0;
+        break;
+      case DRUM_JITTER_PROB_MENU:
+        menu.handleDrumJitterKeypad(keypad.lastKeyPressed);
         menu.render();
         keypad.lastKeyPressed = 0;
         break;
@@ -1975,15 +1983,14 @@ MidiEvent maybeDrumJitter(MidiEvent event){
     return event;
   }
   //roll to see if we jitter -- we use the same probability as synth jittering
-  if(!randomProbResult(menu.noteJitterProb)){
+  if(!randomProbResult(menu.drumJitterProb)){
     return event;
   }
   //if we get here, we jitter.  We pick a random learned instrument from the drum machine. Like with
   //note jittering, this is allowed to be the same as the original note.
   byte newNote = pickRandomElement(drumMachine->instrumentsLearned, drumMachine->numInstruments);
-  if(newNote!=event.note){
-    event.note = newNote;
-  }
+  Serial.print("New drum note: ");
+  
   //debug
   Serial.print(F("Jittering drum note on channel "));
   Serial.print(event.channel);
@@ -1991,6 +1998,11 @@ MidiEvent maybeDrumJitter(MidiEvent event){
   Serial.print(event.note);
   Serial.print(F(" to "));
   Serial.println(newNote);
+  
+  if(newNote!=event.note){
+    event.note = newNote;
+  }
+  
 
   return event;
 }

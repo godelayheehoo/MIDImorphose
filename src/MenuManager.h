@@ -8,6 +8,7 @@ enum MenuState {
     MENU_1,
     MENU_2,
     NOTE_JITTER_PROB_MENU,
+    DRUM_JITTER_PROB_MENU,
     RETRIGGER_PROB_MENU,
     CHANNEL_CONFIG_MENU,
     STUTTER_LENGTH_MENU,
@@ -69,6 +70,7 @@ public:
     void render();
     void handleInput(MenuButton btn);
     void handleJitterKeypad(char key); // For NOTE_JITTER_PROB_MENU
+    void handleDrumJitterKeypad(char key); // For DRUM_JITTER_PROB_MENU
     void handleRetriggerKeypad(char key); // For RETRIGGER_PROB_MENU
     void handleStutterTemperatureKeypad(char key); // For STUTTER_TEMPERATURE_MENU
     MenuState currentMenu;
@@ -82,6 +84,7 @@ public:
     void saveMenu1(int eepromAddr);
     void saveMenuB(int eepromAddr);
     void saveNoteJitterProb(int eepromAddr);
+    void saveDrumJitterProb(int eepromAddr);
     void saveRetriggerProb(int eepromAddr);
     void saveStutterTemperature(int eepromAddr);
     void saveSynthRetrigger(int eepromAddr);
@@ -110,6 +113,8 @@ public:
     // Note Jitter Prob menu
     String jitterInputBuffer = "";
     int noteJitterProb = 0;
+    String drumJitterInputBuffer = "";
+    int drumJitterProb = 0;
     String retriggerInputBuffer = "";
     int retriggerProb = 10;
     // Stutter Temperature menu
