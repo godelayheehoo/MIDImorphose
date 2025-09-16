@@ -41,6 +41,9 @@ channel to off and updating.  There's nuance here though-- the stuttered notes w
 //TODO: add a menu option to decide if percolation requires same-channel notes.  
 //TODO: Submenus.
 //TODO: Do I want to re-add the ability to change channels mid-stutter with buttons?  It did lead to some cool effects.
+//todo: Think of how to handle this... you can add velocity rhythm patterns. Per channel though? randomly kicking in and out?
+//TODO: you have enough memory, maybe consider way upping max pulse resolution and then working in grains?
+
 #include <EEPROM.h>
 
 
@@ -85,17 +88,7 @@ const unsigned long TEMP_DISPLAY_TIME = 2000;  // milliseconds
 #define TFT_DC   28
 #define TFT_RST  -1
 
-//menu setup
-// EEPROM addresses for menu settings
-#define EEPROM_ADDR_MAGIC          0
-#define EEPROM_ADDR_DRUM_STATE     1
-#define EEPROM_ADDR_SYNTH_STATE    17
-#define EEPROM_ADDR_STUTTER_LENGTH 33
-#define EEPROM_ADDR_OFFSET         34
-#define EEPROM_ADDR_MENU1          35
-#define EEPROM_ADDR_MENUB          36
-#define EEPROM_ADDR_JITTER_PROB    37
-#define EEPROM_ADDR_RETRIGGER_PROB 38
+
 // SPI1 hardware peripheral
 Adafruit_ST7789 menuTft = Adafruit_ST7789(&SPI1, TFT_CS, TFT_DC, TFT_RST);
 MenuManager menu(menuTft);
@@ -475,6 +468,8 @@ CircularBuffer<MidiEvent, MAX_EVENTS> stutterBuffer; //we dump eventsBuffer into
 
 CircularBuffer<unsigned long, MAX_PULSES_PER_STUTTER> pulseStartTimes;
 CircularBuffer<unsigned long, MAX_PULSES_PER_STUTTER> stutterPulseStartTimes; // not sure I need this but might as well make it now.
+//todo: yeah, you only need to grab the first pulseStartTimes element, to set the loop start time or something like that.
+//there's no need to copy over all the pulseSTartTime elements. Can remove this later to save memory.
 
 CircularBuffer<MidiEvent, RETRIGGER_BUFFER_SIZE> retriggerBuffer; //maybe change this to "delayedNotesBuffer" if we end up doing that (holding back some notes for a little)
 CircularBuffer<PitchBender, NUM_ACTIVE_PITCHBENDS> pitchbendBuffer;
@@ -651,6 +646,10 @@ void forwardNote(MidiEvent event) {
     //end debug
     MIDI.sendNoteOff(event.note, 0, event.channel);
   }
+  else{
+    Serial.print("Somehow being asked to sending note of type ");
+    Serial.println(event.type);
+  }
 }
 
 void midiPanic() {
@@ -732,7 +731,10 @@ byte randomOctave() {
 }
 
 void handleClock() {
+  // Serial.print("Send clock at ");
+  // Serial.println(millis());
     MIDI.sendRealTime(midi::Clock);
+    //disabling the clock
 }
 
 
@@ -898,6 +900,9 @@ void setup() {
   menu.noteJitterProb = EEPROM.read(EEPROM_ADDR_JITTER_PROB);
   menu.retriggerProb = EEPROM.read(EEPROM_ADDR_RETRIGGER_PROB);
   menu.stutterTemperature = EEPROM.read(EEPROM_ADDR_STUTTER_TEMPERATURE);
+  menu.retriggerSynths = EEPROM.read(EEPROM_ADDR_SYNTH_RETRIGGER);
+  
+
   Serial.print("Loaded noteJitterProb from EEPROM: ");
   Serial.println(menu.noteJitterProb);
   Serial.print("Loaded stutterTemperature from EEPROM: ");
@@ -924,6 +929,7 @@ void setup() {
     menu.noteJitterProb = 0;
     menu.retriggerProb = 10;
     menu.stutterTemperature = 0;
+    menu.retriggerSynths = false;
     // Immediately save defaults to EEPROM so future boots load correct values
     EEPROM.write(EEPROM_ADDR_MAGIC, EEPROM_MAGIC);
     EEPROM.put(EEPROM_ADDR_DRUM_STATE, drumState);
@@ -935,7 +941,9 @@ void setup() {
     menu.saveNoteJitterProb(EEPROM_ADDR_JITTER_PROB);
     menu.saveRetriggerProb(EEPROM_ADDR_RETRIGGER_PROB);
     menu.saveStutterTemperature(EEPROM_ADDR_STUTTER_TEMPERATURE);
+    menu.saveSynthRetrigger(EEPROM_ADDR_SYNTH_RETRIGGER);
   }
+
 
 
   // Decode drumMIDIenabled and synthMIDIenabled arrays
@@ -1236,22 +1244,20 @@ else{
 //Change: basically, we no longer only push to events when we're not stuttering.  We always push to events buffer.
   //read midi
   if(MIDI.read()){
-    //skip the read if we've JUST changed the stutter button state
-    if (millis() - lastButtonChangeTime < 50) {
-        return;
-      }
     //check if clock
     byte type = MIDI.getType();
       //clock pulse logic
       if (type == midi::Clock) {
-
-        //we "handle the clock, which JUST means rotating out the eventsBuffers, only if we're not looping. If not looping, no new notes get appended anyway.
-        if(!isLooping){
         manglerHandleClock();
-        }
+        
       }
       //non-clock handling
       else{
+        //skip the read if we've JUST changed the stutter button state -- this doesn't apply to clock
+    if (millis() - lastButtonChangeTime < 50) {
+        return;
+      }
+
         byte channel = MIDI.getChannel();
     
         //we still only append to the events buffer if we're tracking that midi channel, we still only forward
@@ -1309,7 +1315,7 @@ else{
               // Serial.println(newEvent.velocity);
               eventsBuffer.push(newEvent);
 
-              if(retriggerOn){
+              if(retriggerOn && drumMIDIenabled[channel-1] || (synthMIDIenabled[channel-1] && menu.retriggerSynths)){
               //retrigger cue logic -- works on both synth and drum currently
               if(randomProbResult(menu.retriggerProb)){
                   // Serial.println("Cued a retrigger note");

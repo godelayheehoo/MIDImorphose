@@ -1,7 +1,3 @@
-
-
-
-
 // Save menu settings to EEPROM
 #include <EEPROM.h>
 #include "MenuManager.h"
@@ -42,6 +38,12 @@ void MenuManager::saveStutterTemperature(int eepromAddr) {
     EEPROM.write(EEPROM_ADDR_MAGIC, EEPROM_MAGIC);
     EEPROM.write(eepromAddr, stutterTemperature);
 }
+
+void MenuManager::saveSynthRetrigger(int eepromAddr) {
+    EEPROM.write(EEPROM_ADDR_MAGIC, EEPROM_MAGIC);
+    EEPROM.write(eepromAddr, retriggerSynths ? true : false);
+}
+
 
 
 MenuManager::MenuManager(Adafruit_ST7789& display) : tft(display), currentMenu(MAIN_MENU) {
@@ -105,9 +107,28 @@ void MenuManager::handleInput(MenuButton btn) {
         // Up/down do nothing
         return;
     }
+    // Retrigger Synth menu: three options, select sets retriggerSynths and returns to main menu
+    if (currentMenu == RETRIGGER_SYNTH_MENU) {
+        if (btn == BUTTON_UP) {
+            if (retriggerSynthSelectedIdx > 0) retriggerSynthSelectedIdx--;
+        } else if (btn == BUTTON_DOWN) {
+            if (retriggerSynthSelectedIdx < 2) retriggerSynthSelectedIdx++;
+        } else if (btn == BUTTON_SELECT) {
+            if (retriggerSynthSelectedIdx == 0) {
+                currentMenu = MAIN_MENU;
+            } else if (retriggerSynthSelectedIdx == 1) {
+                retriggerSynths = true;
+                saveSynthRetrigger(EEPROM_ADDR_SYNTH_RETRIGGER);
+            } else if (retriggerSynthSelectedIdx == 2) {
+                retriggerSynths = false;
+                saveSynthRetrigger(EEPROM_ADDR_SYNTH_RETRIGGER);
+            }
+        }
+        return;
+    }
     switch (currentMenu) {
         case MAIN_MENU: {
-            // Now 8 items: Menu 1, Menu 2, Note Jitter Prob, Retrigger Prob, Stutter Temperature, Channel Config, Stutter Length, Offset/Scale
+            // Now 9 items: Menu 1, Menu 2, Note Jitter Prob, Retrigger Prob, Stutter Temperature, Channel Config, Stutter Length, Offset/Scale, Retrigger Synth
             if (btn == BUTTON_UP) {
                 if (mainMenuSelectedIdx > 0) {
                     mainMenuSelectedIdx--;
@@ -116,7 +137,7 @@ void MenuManager::handleInput(MenuButton btn) {
                     }
                 }
             } else if (btn == BUTTON_DOWN) {
-                if (mainMenuSelectedIdx < 7) {
+                if (mainMenuSelectedIdx < 8) {
                     mainMenuSelectedIdx++;
                     if (mainMenuSelectedIdx > mainMenuScrollIdx + MAIN_MENU_VISIBLE_ITEMS - 1) {
                         mainMenuScrollIdx = mainMenuSelectedIdx - MAIN_MENU_VISIBLE_ITEMS + 1;
@@ -151,6 +172,9 @@ void MenuManager::handleInput(MenuButton btn) {
                     currentMenu = OFFSET_MENU;
                     offsetSelectedIdx = 0;
                     offsetScrollIdx = 0;
+                } else if (mainMenuSelectedIdx == 8) {
+                    currentMenu = RETRIGGER_SYNTH_MENU;
+                    retriggerSynthSelectedIdx = 0;
                 }
             }
             break;
@@ -333,16 +357,17 @@ void MenuManager::handleStutterTemperatureKeypad(char key) {
 void MenuManager::render() {
     if (currentMenu == MAIN_MENU) {
         // Main menu: list of menus
-    const char* menus[8] = {"Menu 1", "Menu 2", "Note Jitter Prob", "Retrigger Prob", "Temperature", "Channel Config", "Stutter Length", "Offset/Scale"};
+    const char* menus[9] = {"Menu 1", "Menu 2", "Note Jitter Prob", "Retrigger Prob", "StutterTemperature", "Channel Config", "Stutter Length", "Offset/Scale", "Retrigger Synth"};
         int yStart = 10;
         tft.setTextSize(2);
         tft.setCursor(10, yStart);
         tft.setTextColor(ST77XX_WHITE);
         tft.fillScreen(ST77XX_BLACK);
         tft.print("Main Menu");
+        // Main menu labels
         int itemIdx = mainMenuScrollIdx;
         int y = yStart;
-        for (int visible = 0; visible < MAIN_MENU_VISIBLE_ITEMS && itemIdx < 8; ++visible, ++itemIdx) {
+        for (int visible = 0; visible < MAIN_MENU_VISIBLE_ITEMS && itemIdx < 9; ++visible, ++itemIdx) {
             tft.setCursor(20, y + 30);
             if (mainMenuSelectedIdx == itemIdx) {
                 tft.setTextColor(ST77XX_BLACK, ST77XX_WHITE);
@@ -350,6 +375,43 @@ void MenuManager::render() {
                 tft.setTextColor(ST77XX_WHITE, ST77XX_BLACK);
             }
             tft.print(menus[itemIdx]);
+            y += 30;
+        }
+        tft.setTextColor(ST77XX_WHITE);
+    } else if (currentMenu == RETRIGGER_SYNTH_MENU) {
+        tft.fillScreen(ST77XX_BLACK);
+        tft.setTextSize(2);
+        tft.setTextColor(ST77XX_WHITE);
+        tft.setCursor(10, 10);
+        tft.print("Retrigger Synth");
+        int yStart = 50;
+        const char* options[3] = {"...", "Enabled", "Disabled"};
+        int y = yStart;
+        for (int i = 0; i < 3; ++i) {
+            int squareX = 10;
+            int squareY = y + 6;
+            int squareSize = 12;
+            // Only show square for Enabled/Disabled
+            if (i == 1) {
+                if (retriggerSynths) {
+                    tft.fillRect(squareX, squareY, squareSize, squareSize, ST77XX_MAGENTA);
+                } else {
+                    tft.drawRect(squareX, squareY, squareSize, squareSize, ST77XX_WHITE);
+                }
+            } else if (i == 2) {
+                if (!retriggerSynths) {
+                    tft.fillRect(squareX, squareY, squareSize, squareSize, ST77XX_MAGENTA);
+                } else {
+                    tft.drawRect(squareX, squareY, squareSize, squareSize, ST77XX_WHITE);
+                }
+            }
+            tft.setCursor(squareX + squareSize + 6, y);
+            if (retriggerSynthSelectedIdx == i) {
+                tft.setTextColor(ST77XX_BLACK, ST77XX_WHITE);
+            } else {
+                tft.setTextColor(ST77XX_WHITE, ST77XX_BLACK);
+            }
+            tft.print(options[i]);
             y += 30;
         }
         tft.setTextColor(ST77XX_WHITE);

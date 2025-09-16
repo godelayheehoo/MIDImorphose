@@ -12,7 +12,8 @@ enum MenuState {
     CHANNEL_CONFIG_MENU,
     STUTTER_LENGTH_MENU,
     OFFSET_MENU,
-    STUTTER_TEMPERATURE_MENU
+    STUTTER_TEMPERATURE_MENU,
+    RETRIGGER_SYNTH_MENU
 };
 // Offset sets and labels
 struct OffsetSet {
@@ -83,6 +84,7 @@ public:
     void saveNoteJitterProb(int eepromAddr);
     void saveRetriggerProb(int eepromAddr);
     void saveStutterTemperature(int eepromAddr);
+    void saveSynthRetrigger(int eepromAddr);
 public:
     Adafruit_ST7789& tft;
     // Main menu selection
@@ -90,6 +92,11 @@ public:
     int channelConfigSelectedIdx = 0;
     int mainMenuScrollIdx = 0;
     static const int MAIN_MENU_VISIBLE_ITEMS = 3;
+    // Retrigger Synth menu selection
+    int retriggerSynthSelectedIdx = 0; // 0 = '...', 1 = Enabled, 2 = Disabled
+    static const int RETRIGGER_SYNTH_TOTAL_ITEMS = 3;
+    // Retrigger synths enabled/disabled
+    bool retriggerSynths = false;
     // Menu 1 selection
     int menu1SelectedIdx = 0; // 0 = '...', 1-4 = options
     int menu1ScrollIdx = 0; // index of first visible option (0 = '...', 1 = Option 1, ...)
