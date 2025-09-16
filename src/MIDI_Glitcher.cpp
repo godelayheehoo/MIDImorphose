@@ -20,7 +20,8 @@ channel to off and updating.  There's nuance here though-- the stuttered notes w
 */
 
 
-//todo: try changing time to uint16_t (you'll need to use relative time), try changing time to be synced to clock pulses (byte/uint8_t).//todo: consider updating display to reflect changes to pulseResolution?
+//todo: try changing time to uint16_t (you'll need to use relative time), try changing time to be synced to clock pulses (byte/uint8_t)
+//toodo: Consider a more general status menu, that shows things like pulseResolution, tempo, etc?  How often to update?
 //todo: it's kind of cool when I lower the events buffer way low and loop off of that, maybe make that something you can turn on/off
 //todo: Figure out how I want to handle drum note numbers (for equivalent to jitter).  Could assign them per channel and "know" some like the dbi's, could also "learn" them per-channel (could get memory heavy)
 //todo: update code to use the createOffNote() function where appropraite
@@ -28,19 +29,19 @@ channel to off and updating.  There's nuance here though-- the stuttered notes w
 //todo: MAYBE add a second events buffer that *does* track events while stuttering. When we stutter,
 //we dump the contents of "tracker buffer" into stutter events buffer and keep tracking notes as normal.
 //will require significant rewriting. 
-//TODO: Add the ability to change the stutter temperature, probably from a menu. 
 //TODO: should actually maybe -- check if you haven't done this-- make sure that the temp swapping
-//only happens on notes whose time it is to be played, not on every loop.
+//only happens on notes whose time it is to be played, not on every loop. <- what does this mean?
 //TODO: add full reversal.  WIll require changing reference in playedSavedPulses to use a copy of the event,
-//but make sure we're still updating played correctly.  
+//but make sure we're still updating played correctly.  This could be easier with a move to a second buffer actually.  But still,
+//need to reverse note assignments, keeping time in place.  But it's easily reversible, just swap again. 
 //TODO: percolation needs note off handling added.  This is basically already solved in retrigger but it kind of sucks to do.
-//TODO: percolation seems to degenerate, like it gets stuck to a certain note.  Maybe it's not undoing its buffer or something. Maybe it *is* editing notes in place. 
 //TODO: maybe make a menu option that lets you set the "default" status screen to be the channel matrix vs stretch. 
 //kind of depends on if I end up removing the 7seg.
 //I could leave the 7seg and have the status show a 400 cell grid filling up left to right, top to bottom as you twist the pot
 //TODO: try, it might not work well, but try having the SD matrix cells flash when notes come in?
 //TODO: add a menu option to decide if percolation requires same-channel notes.  
 //TODO: Submenus.
+//TODO: Do I want to re-add the ability to change channels mid-stutter with buttons?  It did lead to some cool effects.
 #include <EEPROM.h>
 
 
@@ -333,6 +334,7 @@ const float MIN_STRETCH_INTERVAL_UPDATE = 200;
 const int MAX_INSTRUMENTS = 16;
 
 const byte JITTER_BUFFER_SIZE = 128;
+const byte PERC_BUFFER_SIZE = 128;
 
 const byte RERETRIGGER_PROB = 50;
 const byte RETRIGGER_BUFFER_SIZE = 64;
@@ -475,6 +477,9 @@ CircularBuffer<MidiEvent, RETRIGGER_BUFFER_SIZE> retriggerBuffer; //maybe change
 CircularBuffer<PitchBender, NUM_ACTIVE_PITCHBENDS> pitchbendBuffer;
 JitteredNote jitterBuffer[JITTER_BUFFER_SIZE];
 int jitterCount = 0;
+PercNote percBuffer[PERC_BUFFER_SIZE];
+int percCount = 0;
+
 
 // // DEBUG BUFFER
 // const int NUM_PULSES = 48;
@@ -766,7 +771,7 @@ void drawStretchStatusDisplay();
 
 MidiEvent maybeNoteNumberJitter(MidiEvent event);
 MidiEvent maybePercolateNote(MidiEvent event, byte index_number);
-
+void clearAllPercolatedNotes();
 
 // --- State variables for pending updates ---
 bool pendingDrumChannelUpdate = false;
@@ -1368,6 +1373,8 @@ if(validLoopFlag){
       }
       //kill all midi Notes on tracked channels at the end of the loop (we may not have the note-offs for all our note-ons, so this is necessary)
       killTrackedChannelsNotes();
+      //clear out the perc'd notes
+      clearAllPercolatedNotes();
     }
   }
   }//end isLooping logic
@@ -1821,16 +1828,75 @@ void playRetriggeredNotes(){
 }
 //end retrigger functions
 
+
+// --- Add a percolated note ---
+bool addPercolatedNote(byte oldNote, byte newNote, byte channel) {
+    if (percCount >= PERC_BUFFER_SIZE) {
+        // buffer full, handle warning elsewhere (LED blink)
+        return false;
+    }
+    percBuffer[percCount++] = {oldNote, newNote, channel};
+    return true;
+}
+
+// --- Remove a note matching oldNote & channel. Send the corresponding note off for any found. ---
+bool removePercolatedNote(byte oldNote, byte channel) {
+  bool removedANote = false;
+    for (int i = 0; i < percCount; i++) {
+        if (percBuffer[i].originalNote == oldNote &&
+            percBuffer[i].channel == channel) {
+            //turn off the percolated note
+            MIDI.sendNoteOff(percBuffer[i].newNote, 0, channel);
+            // shift all later elements down
+            removedANote = true;
+            for (int j = i; j < percCount - 1; j++) {
+                percBuffer[j] = percBuffer[j + 1];
+            }
+            percCount--;
+            i--; // check new element at this position
+        }
+    }
+    return removedANote;
+}
+
+void clearAllPercolatedNotes() {
+  //turn off all percolated notes -- this works in concert with killing all tracked channels, but covers when we change channel
+  //mid stutter (not as easy now that that's done through the menu)
+  for (int i = 0; i < percCount; i++) {
+      MIDI.sendNoteOff(percBuffer[i].newNote, 0, percBuffer[i].channel);
+  }
+    percCount = 0; // clear the buffer
+}
 //percolation of stutter
 ///basically, this takes a midi event and randomly selects one within (-STUTTER_TEMPERATURE, STUTTER_TEMPERATURE) events of it
 //and maybe plays that note number instead.  This is ONLY done for note on events right now (I'm feeling lazy and memory shy),
 //we'll rely on the end-of-loop midi offs to turn off the notes.
-//this also works on ALL channels, which is going to be *weird* with drums.  We'll probably
-//need to fix that later as well but it's going to be kind of tough.  
+//upgrading to work on off notes as well now, basically copying how I do jittered notes.  Need to be careful though, since
+//this one only fires during stutters-- I don't think that makes a difference, but be careful.  Need to think through
+//how it interacts with end-of-loop note offs.  Maybe just clear them all at the end of each loop?
 //maybe I'll instead create a random number of steps and then walk down a filtered buffer of only
 //synth notes and/or only channel-sharing notes?
 MidiEvent maybePercolateNote(MidiEvent event, byte index_number){
-  //if a non-qualifying event, exit right away.
+  //if we get a note-off, we want to turn off any percolated notes from the same original note
+  /*bool removedANote = removeJitteredNote(event.note, event.channel);
+    if(removedANote && event.type==midi::NoteOff){
+      //if we removed a note off, we'll just pass on a NO_OP midi event. The other fields don't really matter.
+      //This is to avoid sending an off for a note we jittered TO. 
+      newEvent.type = MIDI_NOOP;
+      return newEvent;
+    }*/
+  
+    bool removedANote = removePercolatedNote(event.note, event.channel);
+    //we return a midi noop event, since we don't want to send a note off for the original note
+    if(removedANote&& event.type==midi::NoteOff){
+    MidiEvent newEvent;
+    newEvent.type = MIDI_NOOP;
+    newEvent.channel = event.channel;
+    newEvent.note = event.note;
+    return newEvent;
+  }
+
+  //if a non-qualifying event, exit right away  Note this shouldn't get hit by noteoffs..
   if(event.type != midi::NoteOn || !synthMIDIenabled[event.channel - 1]) {
     return event;}
 
@@ -1879,6 +1945,8 @@ MidiEvent maybePercolateNote(MidiEvent event, byte index_number){
     Serial.println(newNote);
     Serial.print(F(" on channel "));
     Serial.println(eventsBuffer[working_index].channel);
+    //if we do have a new note, we need to track it so we can turn it off later
+    addPercolatedNote(event.note, newNote, event.channel);
     return newEvent;
   }
   else{return event;}
