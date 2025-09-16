@@ -34,7 +34,6 @@ channel to off and updating.  There's nuance here though-- the stuttered notes w
 //TODO: add full reversal.  WIll require changing reference in playedSavedPulses to use a copy of the event,
 //but make sure we're still updating played correctly.  This could be easier with a move to a second buffer actually.  But still,
 //need to reverse note assignments, keeping time in place.  But it's easily reversible, just swap again. 
-//TODO: percolation needs note off handling added.  This is basically already solved in retrigger but it kind of sucks to do.
 //TODO: maybe make a menu option that lets you set the "default" status screen to be the channel matrix vs stretch. 
 //kind of depends on if I end up removing the 7seg.
 //I could leave the 7seg and have the status show a 400 cell grid filling up left to right, top to bottom as you twist the pot
@@ -472,11 +471,17 @@ struct PitchBender {
 
 // --- Buffers ---
 CircularBuffer<MidiEvent, MAX_EVENTS> eventsBuffer;
+CircularBuffer<MidiEvent, MAX_EVENTS> stutterBuffer; //we dump eventsBuffer into this when we start stuttering
+
 CircularBuffer<unsigned long, MAX_PULSES_PER_STUTTER> pulseStartTimes;
+CircularBuffer<unsigned long, MAX_PULSES_PER_STUTTER> stutterPulseStartTimes; // not sure I need this but might as well make it now.
+
 CircularBuffer<MidiEvent, RETRIGGER_BUFFER_SIZE> retriggerBuffer; //maybe change this to "delayedNotesBuffer" if we end up doing that (holding back some notes for a little)
 CircularBuffer<PitchBender, NUM_ACTIVE_PITCHBENDS> pitchbendBuffer;
+
 JitteredNote jitterBuffer[JITTER_BUFFER_SIZE];
 int jitterCount = 0;
+
 PercNote percBuffer[PERC_BUFFER_SIZE];
 int percCount = 0;
 
@@ -535,7 +540,7 @@ unsigned long lastStutterChange = 0;
 unsigned long lastButtonChangeTime = 0;
 MidiEvent dummyEvent;
 unsigned long dummyTime;
-int numSynthNoteOnsInEventsBuffer;
+int numSynthNoteOnsInStutterBuffer;
 // bool MIDIPlayState = true; //NOTE: This MAY be reversed from what it technically says!  We won't actually know if it's started or stopped when we start the arduino.
 //TODO: figure out why this isn't working.
 //midi channels
@@ -772,7 +777,8 @@ void drawStretchStatusDisplay();
 MidiEvent maybeNoteNumberJitter(MidiEvent event);
 MidiEvent maybePercolateNote(MidiEvent event, byte index_number);
 void clearAllPercolatedNotes();
-
+void clearStutterBuffer();
+void clearStutterPulseTimes();
 // --- State variables for pending updates ---
 bool pendingDrumChannelUpdate = false;
 bool pendingSynthChannelUpdate = false;
@@ -1155,6 +1161,15 @@ if (panicButton.update()) {
   ///stutter button is pressed
   if (stutterButtonPressed && !prevStutterPressed) {
     Serial.println("Stutter button pressed!");
+    //clear the stutter buffer
+    clearStutterBuffer();
+    clearStutterPulseTimes();
+    //dump the events buffer into the stutter buffer (don't empty the events buffer)
+    for(int i =0; i<eventsBuffer.size(); i++){
+      MidiEvent e = eventsBuffer[i];
+      stutterBuffer.push(e);
+    }
+
     digitalWrite(bufferLedPin,LOW);
     //
     //kill existing notes on tracked channels
@@ -1165,11 +1180,17 @@ if (panicButton.update()) {
     // Serial.println(loopStartTime);
     isLooping = true;
     
-    numSynthNoteOnsInEventsBuffer = 0;
-    for(int i =0; i<eventsBuffer.size(); i++){
-      if(eventsBuffer[i].type==midi::NoteOn && synthMIDIenabled[eventsBuffer[i].channel-1]){
-        numSynthNoteOnsInEventsBuffer++;
+    //copy events buffer to stutter buffer
+    numSynthNoteOnsInStutterBuffer = 0;
+    for(int i =0; i<stutterBuffer.size(); i++){
+      if(stutterBuffer[i].type==midi::NoteOn && synthMIDIenabled[stutterBuffer[i].channel-1]){
+        numSynthNoteOnsInStutterBuffer++;
       }
+    }
+    //copy pulse start times to stutter pulse start times
+    for(int i =0; i<pulseStartTimes.size(); i++){
+      unsigned long t = pulseStartTimes[i];
+      stutterPulseStartTimes.push(t);
     }
   }
 
@@ -1177,13 +1198,6 @@ if (panicButton.update()) {
   if (!stutterButtonPressed && prevStutterPressed) {
     isLooping = false;
     killTrackedChannelsNotes();
-    //clear out stored notes
-    while (!eventsBuffer.empty()) {
-      eventsBuffer.pop(dummyEvent);
-    }
-    while(!pulseStartTimes.empty()){
-      pulseStartTimes.pop(dummyTime);
-    }
   }
 
   //check if button state has changed at all
@@ -1219,6 +1233,7 @@ else{
   updateBufferFullBlink();
 }
 
+//Change: basically, we no longer only push to events when we're not stuttering.  We always push to events buffer.
   //read midi
   if(MIDI.read()){
     //skip the read if we've JUST changed the stutter button state
@@ -1238,10 +1253,10 @@ else{
       //non-clock handling
       else{
         byte channel = MIDI.getChannel();
-        //pass through notes if we're on an untracked channel OR if looping is off
-        // Serial.print("MIDI event on channel ");
-        // Serial.println(channel);
-      if(!isLooping||!checkIfMIDIOn(channel)){
+    
+        //we still only append to the events buffer if we're tracking that midi channel, we still only forward
+        //if we're not looping or not on a tracked channel. 
+        //So what we'll do is always create a note 
         if (type == midi::NoteOn || type == midi::NoteOff) {
           byte note = MIDI.getData1();
           byte velocity = MIDI.getData2();
@@ -1276,8 +1291,8 @@ else{
           //note the jittered note does get sent to the buffer -- change from before, which jittered within the buffer. (so now if we jitter 46->48, we stutter the 48 each time)
           }
 
-          //if not looping AND we're on a tracked channel, add to buffer.  Two ifs because I expect to come back in here and add other sblocks
-          if(!isLooping){
+          //if  we're on a tracked channel, add to buffer.  Two ifs because I expect to come back in here and add other sblocks
+          
             if(checkIfMIDIOn(channel)){
           if(type == midi::NoteOn || (type == midi::NoteOff && checkForNoteOn(newEvent.note))){
               //check if buffer is full now
@@ -1304,17 +1319,21 @@ else{
               
           }
           }//end of checkIfMIDIOn
-          }//end isLooping
+          
           //if we're not looping OR we're on an untracked channel-- the contents of this block, pass through the note 
 
-
+          //now if we're on a non-tracked channel or we're not looping, we forward the note.
+      if(!isLooping || !checkIfMIDIOn(channel)){
+        //forward the note
         forwardNote(newEvent);
-        }//end untracked-channel-or-looping-off logic
-        else{//start of tracked channel & looping-on logic
-        //if we're on a tracked channel and we're looping, we don't do anything special here-- looping logic is below.
-        }//end tracked channel and looping-on logic
       }
-      }//end non-clock handling    
+
+        }//end this-is-a-note logic
+        else{//start of this-is-not-a-note logic
+        }
+      
+    
+    }//end non-clock handling    
   }  ///end new read-midi 
 
   //stutter behavior. This is a first attempt, we still need to quantize the playback.
@@ -1325,11 +1344,14 @@ else{
     //if we don't have pulseResolution's worth of pulse, we don't do playback
   //I don't think I need this flag logic, I think I *can* just return out of here.  
   bool validLoopFlag = true;
-  if (pulseStartTimes.size() < menu.pulseResolution) {
+
+  //stil require we have a full buffer, but that should almost always happen because the dumping happens before this block of code
+  if (stutterPulseStartTimes.size() < menu.pulseResolution) {
     Serial.println(F("Insufficient number of pulses!")); 
     validLoopFlag=false;
     isLooping=false;
   }
+
 if(validLoopFlag){
   //starting the loop.
    if (!prevLooping) {
@@ -1343,7 +1365,7 @@ if(validLoopFlag){
 
 
     //get the length of the playback for only the last 'pulseResolution' pulses
-    playbackStartTime = pulseStartTimes[0];
+    playbackStartTime = stutterPulseStartTimes[0];
     //this is left as-is rather than just doing playbackLenght = loopStartTime - playbackStartTime in anticipation of the bpm-estimation pulse-ending logic
     playbackEndTime = loopStartTime;
     //moving playbackLength setting to inside the isLooping Loop, outside of !prevLooping guard, so that it responds to movements of the stretch knob
@@ -1367,9 +1389,9 @@ if(validLoopFlag){
     if (millis() - loopStartTime > playbackLength) {
 
       loopStartTime = millis();
-      for (unsigned int i = 0; i < eventsBuffer.size(); i++) {
+      for (unsigned int i = 0; i < stutterBuffer.size(); i++) {
         // Iterate through all events in this pulse.  Note this resets ALL, not just the ones that are active due to pulseResolution
-        eventsBuffer[i].played = false;
+        stutterBuffer[i].played = false;
       }
       //kill all midi Notes on tracked channels at the end of the loop (we may not have the note-offs for all our note-ons, so this is necessary)
       killTrackedChannelsNotes();
@@ -1391,26 +1413,26 @@ if(logButton.update()){
   //if we're loopoing, print out the notes and channels of everything in the buffer
   if(isLooping){
     Serial.print("There are ");
-    Serial.print(eventsBuffer.size());
-    Serial.println(" events in the buffer:");
-    for(unsigned int i=0; i<eventsBuffer.size(); i++){
+    Serial.print(stutterBuffer.size());
+    Serial.println(" events in stutter buffer:");
+    for(unsigned int i=0; i<stutterBuffer.size(); i++){
       Serial.print(F("Event in buffer -- Note"));
-      if(eventsBuffer[i].type==midi::NoteOn){
+      if(stutterBuffer[i].type==midi::NoteOn){
         Serial.print(F("On:"));
-      } else if(eventsBuffer[i].type==midi::NoteOff){
+      } else if(stutterBuffer[i].type==midi::NoteOff){
         Serial.print(F("Off:"));
       } else{
         Serial.print(F("TypeUnknown:"));
       }
-      Serial.print(eventsBuffer[i].note);
+      Serial.print(stutterBuffer[i].note);
       Serial.print(F(" , Ch:"));
-      Serial.print(eventsBuffer[i].channel);
+      Serial.print(stutterBuffer[i].channel);
       Serial.print(F(" ,v:"));
-      Serial.print(eventsBuffer[i].velocity);
+      Serial.print(stutterBuffer[i].velocity);
       Serial.print(F(" ,pn:"));
-      Serial.print(eventsBuffer[i].pulseNumber);
+      Serial.print(stutterBuffer[i].pulseNumber);
       Serial.print(F(" ,pt:"));
-      Serial.println(eventsBuffer[i].playTime);
+      Serial.println(stutterBuffer[i].playTime);
     }
   }
 }
@@ -1439,16 +1461,28 @@ if(logButton.update()){
 //////////////////////////////////////////////////////////////////////////////////////
 //////////////////////////////////////////////////////////////////////////////////////
 
+void clearStutterBuffer(){
+  while(stutterBuffer.size()>0){
+    stutterBuffer.pop(dummyEvent);
+  }
+  numSynthNoteOnsInStutterBuffer = 0;
+}
+void clearStutterPulseTimes(){
+  while(stutterPulseStartTimes.size()>0){
+    stutterPulseStartTimes.pop(dummyTime);
+  }
+}
+
 //I'm pretty sure it's okay for this to block.
 void playSavedPulses() {
     // Serial.print("Playing saved pulses, size:");
     // Serial.println(eventsBuffer.size());
 
   // Iterate through all saved pulses
-  for (unsigned int i = 0; i < eventsBuffer.size(); i++) {
+  for (unsigned int i = 0; i < stutterBuffer.size(); i++) {
     // Iterate through all events
 
-    MidiEvent& event = eventsBuffer[i];  // Use reference to original
+    MidiEvent& event = stutterBuffer[i];  // Use reference to original
     //todo: maybe fix this?s
     // Serial.print("first pulse in events buffer:");
     // Serial.print(eventsBuffer[0].pulseNumber);
@@ -1472,7 +1506,7 @@ void playSavedPulses() {
     // Now we're checking the ORIGINAL event's played status -- though I'm not convinced this matters
     if (!event.played && current_relative_time >= relative_note_time) {
 
-      eventsBuffer[i].played = true;
+      stutterBuffer[i].played = true;
 
 #ifdef ACTIVE_NOTES_DEBUG
       if (!activeNotes[event.note]) {
@@ -1567,6 +1601,7 @@ void manglerHandleClock() {
 }
 
 
+//this SHOULD use eventsBuffer.
 bool checkForNoteOn(byte noteOffNumber) {
   for (int i = eventsBuffer.size() - 1; i >= 0; --i) {
     const MidiEvent& ev = eventsBuffer[i];
@@ -1876,6 +1911,8 @@ void clearAllPercolatedNotes() {
 //how it interacts with end-of-loop note offs.  Maybe just clear them all at the end of each loop?
 //maybe I'll instead create a random number of steps and then walk down a filtered buffer of only
 //synth notes and/or only channel-sharing notes?
+
+//this only fires when stuttering, so we use stutterbuffer instead of eventsbuffer
 MidiEvent maybePercolateNote(MidiEvent event, byte index_number){
   //if we get a note-off, we want to turn off any percolated notes from the same original note
   /*bool removedANote = removeJitteredNote(event.note, event.channel);
@@ -1903,9 +1940,9 @@ MidiEvent maybePercolateNote(MidiEvent event, byte index_number){
   //only do this for note on events for now (TODO: eugh, going to have to change note offs)
   if(event.type == midi::NoteOn && synthMIDIenabled[event.channel - 1]){
     int random_step_count = random(0, menu.stutterTemperature);
-    //cap random_step_count to numSynthNoteOnsInEventsBuffer-1  . Use mod for more variatoin. 
-    if(random_step_count >= numSynthNoteOnsInEventsBuffer) {
-      random_step_count = random_step_count % numSynthNoteOnsInEventsBuffer;
+    //cap random_step_count to numSynthNoteOnsInStutterBuffer-1  . Use mod for more variatoin. 
+    if(random_step_count >= numSynthNoteOnsInStutterBuffer) {
+      random_step_count = random_step_count % numSynthNoteOnsInStutterBuffer;
     }
      //50/50 chance of going up or down
     int8_t direction;
@@ -1917,11 +1954,11 @@ MidiEvent maybePercolateNote(MidiEvent event, byte index_number){
     unsigned int working_index = index_number;
     byte newNote;
     //if we do a full loop, just return the original note, don't keep going. This should never happen.
-    unsigned int maxSteps = eventsBuffer.size();
+    unsigned int maxSteps = stutterBuffer.size();
     while(steps_taken<random_step_count&&maxSteps--){
-      //we walk through eventsBuffer in the direction, we only count synth events.
-      working_index = (working_index + eventsBuffer.size() + direction) % eventsBuffer.size();
-      if(synthMIDIenabled[eventsBuffer[working_index].channel-1] && eventsBuffer[working_index].type==midi::NoteOn){
+      //we walk through stutterBuffer in the direction, we only count synth events.
+      working_index = (working_index + stutterBuffer.size() + direction) % stutterBuffer.size();
+      if(synthMIDIenabled[stutterBuffer[working_index].channel-1] && stutterBuffer[working_index].type==midi::NoteOn){
         steps_taken++;
     }
   }
@@ -1931,7 +1968,7 @@ MidiEvent maybePercolateNote(MidiEvent event, byte index_number){
   }
     //microoptimization--if we ended up where we started, just return the original note
     if(working_index==index_number){return event;}
-    newNote = eventsBuffer[working_index].note;
+    newNote = stutterBuffer[working_index].note;
     //if we got the same note as before, don't create a new event, just return the original
     if(newNote==event.note){return event;}
     //otherwise, create a new event with the new note
@@ -1944,7 +1981,7 @@ MidiEvent maybePercolateNote(MidiEvent event, byte index_number){
     Serial.print(F(" to "));
     Serial.println(newNote);
     Serial.print(F(" on channel "));
-    Serial.println(eventsBuffer[working_index].channel);
+    Serial.println(stutterBuffer[working_index].channel);
     //if we do have a new note, we need to track it so we can turn it off later
     addPercolatedNote(event.note, newNote, event.channel);
     return newEvent;
