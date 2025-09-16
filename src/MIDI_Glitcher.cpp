@@ -42,10 +42,20 @@ channel to off and updating.  There's nuance here though-- the stuttered notes w
 //TODO: Submenus.
 //TODO: Do I want to re-add the ability to change channels mid-stutter with buttons?  It did lead to some cool effects.
 //todo: Think of how to handle this... you can add velocity rhythm patterns. Per channel though? randomly kicking in and out?
-//TODO: you have enough memory, maybe consider way upping max pulse resolution and then working in grains?
+//TODO: you have enough memory *you do), maybe consider way upping max pulse resolution and then working in grains?
+//TODO: if I do do reverse playback on stutter, I'm going to have to figure out how to actually enable 
+//it... another push button switch would kind of suck to have, wouldn't it?
 
-#include <EEPROM.h>
-
+//todo: I mean, in general figure out if you want to be able to assign specific synths to specific channels.
+//doing so would let you do things like have CCs you can manipulate, enable jitter for drum machines, etc.  But how to do it?
+//I guess an enum and pointers to arrays or something?  
+//todo: Another thing you could do is enable specific CCs to be glitched in various ways.  Maybe would
+//want to enable the scroll wheel for that. 
+//todo: I could have drum machines only jitter within themselves, I could have drum machines
+//be able to jitter across eachother, I could have drum machines be able to jitter with synths.
+//unclear which is preferable. If we allow synths, do we fix a synth note or do we let it be the natural note number?
+//presumably the latter, so hats become one note, bass becomes another.  Though that *will* be out of key, so...
+//we'll start by just jittering internal to each machine. Jittering is also channel-internal, so this is easier.
 
 #include <EEPROM.h>
 #include <Arduino.h>
@@ -323,7 +333,8 @@ const byte BUFFER_FULL_LED_BLINK_COUNT = 4; //needs to be twice the number of bl
 const float MIN_STRETCH_INTERVAL_UPDATE = 200;
 
 //this is used in a hypothetical drum machine helper for jittering between instruments
-const int MAX_INSTRUMENTS = 16;
+const int MAX_INSTRUMENTS_PER_DRUM_MACHINE = 16;
+const int MAX_DRUM_MACHINES = 4;
 
 const byte JITTER_BUFFER_SIZE = 128;
 const byte PERC_BUFFER_SIZE = 128;
@@ -365,6 +376,7 @@ struct MidiEvent {
   bool played;
 };
 
+// -- glitch structs --
 struct JitteredNote {
   byte originalNote;
   byte newNote;
@@ -377,8 +389,6 @@ struct PercNote {
   byte newNote;
   byte channel;
 };
-
-
 
 struct PitchBender {
     byte channel;
@@ -461,6 +471,23 @@ struct PitchBender {
     }
 };
 
+struct DrumMachine{
+  int channel;
+  byte instrumentsLearned[MAX_INSTRUMENTS_PER_DRUM_MACHINE];
+  int numInstruments = 0;
+
+  //construct from channel
+  DrumMachine(int ch) : channel(ch) {
+    numInstruments = 0;
+  }
+
+  //default constructor
+  DrumMachine() : channel(0) {
+    numInstruments = 0;
+  }
+};
+
+
 
 // --- Buffers ---
 CircularBuffer<MidiEvent, MAX_EVENTS> eventsBuffer;
@@ -480,13 +507,8 @@ int jitterCount = 0;
 PercNote percBuffer[PERC_BUFFER_SIZE];
 int percCount = 0;
 
-
-// // DEBUG BUFFER
-// const int NUM_PULSES = 48;
-// const int EVENTS_PER_PULSE = 5;
-
-// CircularBuffer<unsigned long, EVENTS_PER_PULSE> debugBuffer[NUM_PULSES];
-// // int debugCounter[48] = {0};
+DrumMachine drumMachines[MAX_DRUM_MACHINES];
+int numDrumMachines = 0;
 
 // --- Script states ---
 bool isLooping = false;
@@ -777,10 +799,18 @@ void showPanicDisplay();
 void drawStretchStatusDisplay();
 
 MidiEvent maybeNoteNumberJitter(MidiEvent event);
+MidiEvent maybeDrumJitter(MidiEvent event);
+
 MidiEvent maybePercolateNote(MidiEvent event, byte index_number);
+
 void clearAllPercolatedNotes();
 void clearStutterBuffer();
 void clearStutterPulseTimes();
+
+bool maybeLearnInstrument(byte channel, byte note);
+bool maybeLearnDrumMachine(byte channel);
+void refreshDrumMachines();
+
 // --- State variables for pending updates ---
 bool pendingDrumChannelUpdate = false;
 bool pendingSynthChannelUpdate = false;
@@ -942,6 +972,10 @@ void setup() {
     menu.saveRetriggerProb(EEPROM_ADDR_RETRIGGER_PROB);
     menu.saveStutterTemperature(EEPROM_ADDR_STUTTER_TEMPERATURE);
     menu.saveSynthRetrigger(EEPROM_ADDR_SYNTH_RETRIGGER);
+
+    //create drum machines on startup. TODO: functionality to relearn drum machines when we update
+    //drumMachineMIDIEnabled
+
   }
 
 
@@ -1290,6 +1324,16 @@ else{
           newEvent.played = false;
           newEvent.pulseNumber = currentPulse;
 
+          //if it's a drum machine, maybe learn the new note/instrument
+          
+          if(type==midi::NoteOn && drumMIDIenabled[channel-1]){
+            //maybe learn the instrument
+            maybeLearnInstrument(channel, note);
+            //now maybe drum jitter the note
+            newEvent = maybeDrumJitter(newEvent);
+          }
+
+          //we can probably consolidate some of these conditionals at some point.
           //maybe jitter the note
           //we adjust for both note on and note off in case later glitches care about note off (though that is unlikely).
           if(synthJitterOn && synthMIDIenabled[channel-1]){
@@ -1299,7 +1343,7 @@ else{
 
           //if  we're on a tracked channel, add to buffer.  Two ifs because I expect to come back in here and add other sblocks
           
-            if(checkIfMIDIOn(channel)){
+          if(checkIfMIDIOn(channel)){
           if(type == midi::NoteOn || (type == midi::NoteOff && checkForNoteOn(newEvent.note))){
               //check if buffer is full now
                if ((eventsBuffer.size()==MAX_EVENTS) && !isBlinking) {
@@ -1440,6 +1484,18 @@ if(logButton.update()){
       Serial.print(F(" ,pt:"));
       Serial.println(stutterBuffer[i].playTime);
     }
+  }
+
+  Serial.println("Known drum machines:");
+  for(int i=0; i<numDrumMachines; i++){
+    Serial.print("Ch:");
+    Serial.print(drumMachines[i].channel);
+    Serial.print(" Instruments:");
+    for(int j=0; j<drumMachines[i].numInstruments; j++){
+      Serial.print(drumMachines[i].instrumentsLearned[j]);
+      Serial.print(" ");
+    }
+    Serial.println();
   }
 }
 
@@ -1670,6 +1726,96 @@ void startBufferFullBlink() {
   blinkStartTime = millis();
 }
 
+bool maybeLearnDrumMachine(byte channel){
+  //first, check if this is even a drum machine
+  if(!drumMIDIenabled[channel-1]){
+    return false;
+  }
+  // then, check if this channel is already learned
+  for(int i = 0; i < numDrumMachines; i++) {
+    if (drumMachines[i].channel == channel) {
+      // Already learned
+      return false;
+    }
+  }
+  // Not found, try to add if space
+  if(numDrumMachines >= MAX_DRUM_MACHINES) {
+    Serial.println(F("Max drum machines learned, can't learn more"));
+    return false;
+  }
+  DrumMachine newMachine = DrumMachine(channel);
+  drumMachines[numDrumMachines] = newMachine;
+  numDrumMachines++;
+  Serial.print("Learned new drum machine on channel ");
+  Serial.println(channel);
+  return true;
+}
+
+bool maybeLearnInstrument(byte channel, byte notenumber){
+  if(!drumMIDIenabled[channel-1]){
+    return false;
+  }
+  // Find or create the drum machine for this channel
+  DrumMachine* drumMachine = nullptr;
+  for(int i = 0; i < numDrumMachines; i++) {
+    if (drumMachines[i].channel == channel) {
+      drumMachine = &drumMachines[i];
+      break;
+    }
+  }
+  if (!drumMachine) {
+    // Try to create a new drum machine
+    if (!maybeLearnDrumMachine(channel)) {
+      Serial.print("Tried to learn instrument on channel ");
+      Serial.print(channel);
+      Serial.println(" but couldn't");
+      return false;
+    }
+    drumMachine = &drumMachines[numDrumMachines-1];
+  }
+  // Check if the instrument is already learned
+  for(int i = 0; i < drumMachine->numInstruments; i++) {
+    if(drumMachine->instrumentsLearned[i] == notenumber) {
+      // Already learned
+      return false;
+    }
+  }
+  // Add the instrument if there is space
+  if(drumMachine->numInstruments < MAX_INSTRUMENTS_PER_DRUM_MACHINE) {
+    drumMachine->instrumentsLearned[drumMachine->numInstruments] = notenumber;
+    drumMachine->numInstruments++;
+    Serial.print("Learned new instrument ");
+    Serial.print(notenumber);
+    Serial.print(" on drum machine channel ");
+    Serial.println(channel);
+    return true;
+  } else {
+    Serial.print("Tried to learn instrument ");
+    Serial.print(notenumber);
+    Serial.print(" on channel ");
+    Serial.print(channel);
+    Serial.println(" but couldn't");
+    return false;
+  }
+}
+
+void refreshDrumMachines() {
+  //first, we remove all non-drum machines.  Then we try to learn all the drum machines in order
+  for(int i = 0; i < numDrumMachines; i++) {
+    if (!drumMIDIenabled[drumMachines[i].channel - 1]) {
+      // This channel is no longer a drum machine, remove it
+      Serial.print("Forgetting drum machine on channel ");
+      Serial.println(drumMachines[i].channel);
+      // Shift remaining machines down
+      for(int j = i; j < numDrumMachines - 1; j++) {
+        drumMachines[j] = drumMachines[j + 1];
+      }
+      numDrumMachines--;
+      i--; // Check this index again as it now has a new machine
+    }
+  }
+}
+
 ///////Glitching functions (non-stutter)
 
 //pitchbend functions
@@ -1804,6 +1950,51 @@ MidiEvent maybeNoteNumberJitter(MidiEvent event) {
     newEvent.note = current_note;
     return newEvent;
 }
+
+//this is a much simpler function the synth jittering because we won't worry 
+//about sending off notes.  We just assume the drum machine doesn't care about those.
+//todo: mayyyyyybe change this later. Won't be too bad to do so.
+MidiEvent maybeDrumJitter(MidiEvent event){
+  //Note we should always have at least one drum machine, since this comes after maybe learning.
+  //if it's not a note on, we're done.
+  if(!(event.type==midi::NoteOn)){return event;}
+  //first, find the learned drum machine for this channel.  If it's not there, just return the original event.
+  DrumMachine* drumMachine = nullptr;
+  for(int i = 0; i < numDrumMachines; i++) {
+    if (drumMachines[i].channel == event.channel) {
+      drumMachine = &drumMachines[i];
+      break;
+    }
+  }
+  if (!drumMachine) {
+    return event;
+  }
+
+  //micro optimization-- if there's only one instrument, we can't jitter
+  if(drumMachine->numInstruments<2){
+    return event;
+  }
+  //roll to see if we jitter -- we use the same probability as synth jittering
+  if(!randomProbResult(menu.noteJitterProb)){
+    return event;
+  }
+  //if we get here, we jitter.  We pick a random learned instrument from the drum machine. Like with
+  //note jittering, this is allowed to be the same as the original note.
+  byte newNote = pickRandomElement(drumMachine->instrumentsLearned, drumMachine->numInstruments);
+  if(newNote!=event.note){
+    event.note = newNote;
+  }
+  //debug
+  Serial.print(F("Jittering drum note on channel "));
+  Serial.print(event.channel);
+  Serial.print(F(" from "));
+  Serial.print(event.note);
+  Serial.print(F(" to "));
+  Serial.println(newNote);
+
+  return event;
+}
+
 //end jitter functions
 
 //retrigger functions
@@ -2126,6 +2317,8 @@ if (newDrumState != oldDrumState) {
   EEPROM.put(EEPROM_ADDR_DRUM_STATE, newDrumState);
   Serial.println("Wrote drum state to EEPROM");
 }
+Serial.println("Refreshing drum machines...");
+refreshDrumMachines();
 }
 
 
