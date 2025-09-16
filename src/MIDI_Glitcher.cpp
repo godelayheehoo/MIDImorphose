@@ -56,6 +56,9 @@ channel to off and updating.  There's nuance here though-- the stuttered notes w
 //unclear which is preferable. If we allow synths, do we fix a synth note or do we let it be the natural note number?
 //presumably the latter, so hats become one note, bass becomes another.  Though that *will* be out of key, so...
 //we'll start by just jittering internal to each machine. Jittering is also channel-internal, so this is easier.
+//todo: note that with the new stutter buffer system, jittering no longer affects stutter, though
+//it does affect the still incoming notes for the eventsBuffer. Could consider re-enabling jitter within the buffer
+//as well.... I'm not sure.  Probably not.
 
 #include <EEPROM.h>
 #include <Arduino.h>
@@ -612,11 +615,11 @@ bool activeNotes[MAX_NOTES] = { false };
 // --- Menu States ---
 //these two are set by button-switches. We'll keep it like that. 
 bool retriggerOn = false; 
-bool synthJitterOn = false; 
+bool jitterOn = false; 
 const int retriggerSwitchPin = 40;
-const int synthJitterSwitchPin = 39;
+const int jitterSwitchPin = 39;
 SwitchHelper retriggerSwitch;
-SwitchHelper synthJitterSwitch;
+SwitchHelper jitterSwitch;
 
 byte octaveShiftOption = 0; //todo: implement
 /*
@@ -847,7 +850,7 @@ void setup() {
   logButton.setup(logButtonPin, INPUT);
 
   retriggerSwitch.setup(retriggerSwitchPin);
-  synthJitterSwitch.setup(synthJitterSwitchPin);
+  jitterSwitch.setup(jitterSwitchPin);
 
   Serial.println("Turning on buffer LED pin");
   digitalWrite(bufferLedPin, HIGH);
@@ -1083,10 +1086,10 @@ void loop() {
     Serial.println(F("Retrigger switch changed!"));
   };
   retriggerOn = retriggerSwitch.isOn();
-  if(synthJitterSwitch.update()){
-    Serial.println(F("Synth jitter switch changed!"));
+  if(jitterSwitch.update()){
+    Serial.println(F("Jitter switch changed!"));
   };
-  synthJitterOn = synthJitterSwitch.isOn();
+  jitterOn = jitterSwitch.isOn();
 
 
 
@@ -1334,7 +1337,8 @@ else{
 
           //if it's a drum machine, maybe learn the new note/instrument
           
-          if(type==midi::NoteOn && drumMIDIenabled[channel-1]){
+          // todo: combine the jitter on check?
+          if(type==midi::NoteOn && drumMIDIenabled[channel-1] && jitterOn){
             //maybe learn the instrument
             maybeLearnInstrument(channel, note);
             //now maybe drum jitter the note
@@ -1344,7 +1348,7 @@ else{
           //we can probably consolidate some of these conditionals at some point.
           //maybe jitter the note
           //we adjust for both note on and note off in case later glitches care about note off (though that is unlikely).
-          if(synthJitterOn && synthMIDIenabled[channel-1]){
+          if(jitterOn && synthMIDIenabled[channel-1]){
           newEvent = maybeNoteNumberJitter(newEvent);  
           //note the jittered note does get sent to the buffer -- change from before, which jittered within the buffer. (so now if we jitter 46->48, we stutter the 48 each time)
           }

@@ -1,6 +1,9 @@
 
 # MIDI Mangler V2
 
+Updates todo:
+- explain the rolling stutter buffer now.
+
 ## Overview
 
 MIDI Mangler V2 is a PlatformIO-based Arduino project for the ATmega2560 (Mega) board. It manipulates MIDI events in real time, providing features such as stuttering/looping, channel filtering, timing effects, note jitter, and retriggering. The project uses a visual menu system on a TFT display for configuration, with hardware controls for performance features. Channel assignments are set using dipswitches and confirmed via the menu. Channel settings are saved to EEPROM for persistence. The project uses the FortySevenEffects MIDI library for MIDI communication.
@@ -11,7 +14,8 @@ MIDI Mangler V2 is a PlatformIO-based Arduino project for the ATmega2560 (Mega) 
 - **Stutter Timestretching:** Adjust the stretch potentiometer to change playback speed for stuttered notes. The current stretch value is shown on the TM1637 7-segment display.
 - **Channel Assignment:** Set drum and synth channel selections using dipswitches, then confirm assignment via the TFT menu (“set drum channels” / “set synth channels”). Channel settings are saved to EEPROM.
 - **Timing Effects:** Dipswitches control timing resolution (from 1/32 to 1/2 notes).
-- **Note Jitter:** Enable/disable jitter using the dedicated switch. Jitter probability can be set via the TFT menu using keypad input.
+- **Note Jitter:** Enable/disable jitter using the dedicated switch. Jitter probability can be set via the TFT menu using keypad input.  Note jitter shares a button with drum machine jitter, so the note (synth) jitter can be disabled in the TFT menu.
+- **Drum Jitter:** Enable/disable jitter using the dedicated switch (same as for synth).  Jitter probability can be set via the TFT menu using keypad input (dedicatd probability).
 - **Retriggering:** Enable/disable retriggering using the dedicated switch. Retrigger probability can be set via the TFT menu using keypad input.
 - **Pitch Bend Glitching:** Random pitch bends can be triggered on synth channels.  Currently, the probability is hardcoded to be somewhat rare.  
 - **Buffer Management:** Large buffer for MIDI events (384 events on MEGA). LED indicates buffer full.

@@ -451,6 +451,35 @@ void MenuManager::render() {
         tft.print("press # when done, press * to restart");
     } else if (currentMenu == NOTE_JITTER_PROB_MENU) {
         tft.fillScreen(ST77XX_BLACK);
+        // Title at top
+        tft.setTextSize(2);
+        tft.setTextColor(ST77XX_WHITE);
+        tft.setCursor(10, 10);
+        tft.print("note jitter prob");
+
+        // '...' at top, always highlighted
+        tft.setTextSize(2);
+        tft.setCursor(10, 40);
+        tft.setTextColor(ST77XX_BLACK, ST77XX_WHITE);
+        tft.print("...");
+
+        // Number in middle, always cyan
+        tft.setTextSize(3);
+        tft.setCursor(40, 80);
+        tft.setTextColor(ST77XX_CYAN, ST77XX_BLACK);
+        if (jitterInputBuffer.length() > 0) {
+            tft.print(jitterInputBuffer);
+        } else {
+            tft.print("0");
+        }
+
+        // Instructions at bottom
+        tft.setTextSize(1);
+        tft.setTextColor(ST77XX_YELLOW);
+        tft.setCursor(10, 120);
+        tft.print("press # when done, press * to restart");
+    } else if (currentMenu == RETRIGGER_SYNTH_MENU) {
+        tft.fillScreen(ST77XX_BLACK);
         tft.setTextSize(2);
         tft.setTextColor(ST77XX_WHITE);
         tft.setCursor(10, 10);
