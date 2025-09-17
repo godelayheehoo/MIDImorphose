@@ -23,21 +23,22 @@ channel to off and updating.  There's nuance here though-- the stuttered notes w
 //todo: try changing time to uint16_t (you'll need to use relative time), try changing time to be synced to clock pulses (byte/uint8_t)
 //toodo: Consider a more general status menu, that shows things like pulseResolution, tempo, etc?  How often to update?
 //todo: it's kind of cool when I lower the events buffer way low and loop off of that, maybe make that something you can turn on/off
-//todo: Figure out how I want to handle drum note numbers (for equivalent to jitter).  Could assign them per channel and "know" some like the dbi's, could also "learn" them per-channel (could get memory heavy)
 //todo: update code to use the createOffNote() function where appropraite
-//todo: Retrigger OPTIONALLY affecting synths, only affecting drums
-//todo: MAYBE add a second events buffer that *does* track events while stuttering. When we stutter,
-//we dump the contents of "tracker buffer" into stutter events buffer and keep tracking notes as normal.
-//will require significant rewriting. 
 //TODO: should actually maybe -- check if you haven't done this-- make sure that the temp swapping
 //only happens on notes whose time it is to be played, not on every loop. <- what does this mean?
 //TODO: add full reversal.  WIll require changing reference in playedSavedPulses to use a copy of the event,
 //but make sure we're still updating played correctly.  This could be easier with a move to a second buffer actually.  But still,
 //need to reverse note assignments, keeping time in place.  But it's easily reversible, just swap again. 
+//this might take a while though, because we have to first flip the note ons, then find the note offs to swap as well.  Which isn't easy,
+//because you can't assume it goes Aon Aoff Bon Boff, COn COff, etc.  SO you have to first flip a note on, then find its note off, then repeat.
+//on teh other hand, this only needs to happen once, when the button is pressed, so not too bad maybe.  Should it have its own trigger button or
+//be menu based?
 //TODO: maybe make a menu option that lets you set the "default" status screen to be the channel matrix vs stretch. 
 //kind of depends on if I end up removing the 7seg.
 //I could leave the 7seg and have the status show a 400 cell grid filling up left to right, top to bottom as you twist the pot
+//probably too slow.
 //TODO: try, it might not work well, but try having the SD matrix cells flash when notes come in?
+//too slow for midi processing probably. 
 //TODO: add a menu option to decide if percolation requires same-channel notes.  
 //TODO: Submenus.
 //TODO: Do I want to re-add the ability to change channels mid-stutter with buttons?  It did lead to some cool effects.
@@ -60,7 +61,7 @@ channel to off and updating.  There's nuance here though-- the stuttered notes w
 //it does affect the still incoming notes for the eventsBuffer. Could consider re-enabling jitter within the buffer
 //as well.... I'm not sure.  Probably not.
 
-//todo: major refactor to turn midi reading into a while loop
+//todo: maybe monitor for overload, some ideas in the chatgpt project for how to do that.
 
 
 //todo: send only clock from deluge and examine to make sure we only get clock bytes in.... something's going on here.
@@ -1041,6 +1042,12 @@ void loop() {
         if (type == midi::NoteOn || type == midi::NoteOff) {
           byte note = MIDI.getData1();
           byte velocity = MIDI.getData2();
+          //if we're not tracking that channel, we just forward the note.
+    if(!checkIfMIDIOn(channel)){
+        MIDI.sendNoteOn(note, velocity, channel);
+        break;
+       }
+    else{
           //create a new midiEvent
           MidiEvent newEvent = MidiEvent();
           newEvent.type = type;
@@ -1085,7 +1092,7 @@ void loop() {
 
           //if  we're on a tracked channel, add to buffer.  Two ifs because I expect to come back in here and add other sblocks
           
-          if(checkIfMIDIOn(channel)){
+          
           if(type == midi::NoteOn || (type == midi::NoteOff && checkForNoteOn(newEvent.note))){
               //check if buffer is full now
                if ((eventsBuffer.size()==MAX_EVENTS) && !isBlinking) {
@@ -1110,18 +1117,23 @@ void loop() {
               }
               
           }
-          }//end of checkIfMIDIOn
+         
           
           //if we're not looping OR we're on an untracked channel-- the contents of this block, pass through the note 
 
-          //now if we're on a non-tracked channel or we're not looping, we forward the note.
-      if(!isLooping || !checkIfMIDIOn(channel)){
+          //now if we're not looping, we forward the note.
+      if(!isLooping){
         //forward the note
         forwardNote(newEvent);
       }
 
-        }//end this-is-a-note logic
+        }
+
+      }//end this-is-a-note logic
         else{//start of this-is-not-a-note logic
+          //this print is okay because it should never happen.
+          Serial.print("Got non-note MIDI type ");
+          Serial.println(type);
         }
       
     
