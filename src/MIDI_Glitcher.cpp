@@ -60,6 +60,8 @@ channel to off and updating.  There's nuance here though-- the stuttered notes w
 //it does affect the still incoming notes for the eventsBuffer. Could consider re-enabling jitter within the buffer
 //as well.... I'm not sure.  Probably not.
 
+//todo: major refactor to turn midi reading into a while loop
+
 
 //todo: send only clock from deluge and examine to make sure we only get clock bytes in.... something's going on here.
 
@@ -761,7 +763,6 @@ byte randomOctave() {
 
 void handleClock() {
     MIDI.sendRealTime(midi::Clock);
-
 }
 
 
@@ -1013,18 +1014,50 @@ void setup() {
 }
 
 void loop() {
+  static unsigned long profile_loop_total = 0;
+  static unsigned long profile_midi = 0;
+  static unsigned long profile_stutter_for = 0;
+  static unsigned long profile_display = 0;
+  static unsigned long profile_count = 0;
+  unsigned long t_loop_start = micros();
+  unsigned long t_midi_start = 0, t_midi_end = 0;
+  unsigned long t_stutter_for_start = 0, t_stutter_for_end = 0;
+  unsigned long t_display_start = 0, t_display_end = 0;
+  bool midiWasProcessed = false;
   
   //first, we check to see if we got a clock message. If we did, we handle it and return. This still doesn't fix
   //the overwhelmed by notes problem.
+  t_midi_start = micros();
   bool midiMsg = MIDI.read();
   byte type;
   if(midiMsg){
+      midiWasProcessed = true;
       type = MIDI.getType();
       if(type==midi::Clock){
         manglerHandleClock();
+        t_midi_end = micros();
+        profile_midi += (t_midi_end - t_midi_start);
+        unsigned long t_loop_end = micros();
+        profile_loop_total += (t_loop_end - t_loop_start);
+        profile_count++;
+        if(profile_count % 1000 == 0){
+          Serial.print("[PROFILE] avg loop(us): ");
+          Serial.print(profile_loop_total/1000.0);
+          Serial.print(", midi(us): ");
+          Serial.print(profile_midi/1000.0);
+          Serial.print(", stutter for(us): ");
+          Serial.print(profile_stutter_for/1000.0);
+          Serial.print(", display(us): ");
+          Serial.print(profile_display/1000.0);
+          Serial.print(", midi present: ");
+          Serial.println(midiWasProcessed ? "yes" : "no");
+          profile_loop_total = 0; profile_midi = 0; profile_stutter_for = 0; profile_display = 0;
+        }
         return;
       }
   }
+  t_midi_end = micros();
+  profile_midi += (t_midi_end - t_midi_start);
   
 
   //debug
@@ -1039,6 +1072,7 @@ if(!midiMsg){
 
   // Handle keypad input for menus using a switch statement
   if (keypad.lastKeyPressed) {
+    t_display_start = micros();
     switch (menu.currentMenu) {
       case NOTE_JITTER_PROB_MENU:
         menu.handleJitterKeypad(keypad.lastKeyPressed);
@@ -1064,6 +1098,8 @@ if(!midiMsg){
       default:
         break;
     }
+    t_display_end = micros();
+    profile_display += (t_display_end - t_display_start);
   }
 
   //debug -- test menu buttons
@@ -1233,10 +1269,13 @@ if (panicButton.update()) {
     clearStutterBuffer();
     clearStutterPulseTimes();
     //dump the events buffer into the stutter buffer (don't empty the events buffer)
+    t_stutter_for_start = micros();
     for(int i =0; i<eventsBuffer.size(); i++){
       MidiEvent e = eventsBuffer[i];
       stutterBuffer.push(e);
     }
+    t_stutter_for_end = micros();
+    profile_stutter_for += (t_stutter_for_end - t_stutter_for_start);
 
     digitalWrite(bufferLedPin,LOW);
     //
@@ -2401,4 +2440,21 @@ void drawStretchStatusDisplay() {
   statusDisplay.setCursor(x, y);
   statusDisplay.print(stretchVal);
   statusDisplay.display();
+  // --- Profiling output at end of loop ---
+  unsigned long t_loop_end = micros();
+  profile_loop_total += (t_loop_end - t_loop_start);
+  profile_count++;
+  if(profile_count % 1000 == 0){
+    Serial.print("[PROFILE] avg loop(us): ");
+    Serial.print(profile_loop_total/1000.0);
+    Serial.print(", midi(us): ");
+    Serial.print(profile_midi/1000.0);
+    Serial.print(", stutter for(us): ");
+    Serial.print(profile_stutter_for/1000.0);
+    Serial.print(", display(us): ");
+    Serial.print(profile_display/1000.0);
+    Serial.print(", midi present: ");
+    Serial.println(midiWasProcessed ? "yes" : "no");
+    profile_loop_total = 0; profile_midi = 0; profile_stutter_for = 0; profile_display = 0;
+  }
 }
