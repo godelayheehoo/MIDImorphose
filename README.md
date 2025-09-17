@@ -111,7 +111,7 @@ The TFT display provides a visual menu system for configuration:
 - While stuttering, you can manipulate which channels are on by changing dipswitches and updating via the menu. Stuttered notes remain, but you can play on top for creative effects.
 - Retriggers do **not** go in the stutter buffer.
 - Notes that are jittered (note-shifted) are placed into the stutter buffer **after** adjustment.
-- It *is* possible to overwhelm the system with notes, which will cause unstable clock and dropped/damaged notes.  This doesn't seem to happen with at least my normal useage, but it's something to be aware of.  With messed up clock though, I think it's only noticeable if you have something upstream of the mangler **and** something downstream (as they'll be out of sync).
+- It *is* possible to overwhelm the system with notes, which will cause unstable clock and dropped/damaged notes.  This doesn't seem to happen with at least my normal useage, but it's something to be aware of.  With messed up clock though, I think it's only noticeable if you have something upstream of the mangler **and** something downstream (as they'll be out of sync).  This is hard to do though, as we use separate serials for tx & rx.
 - Currently nothing is done with CCs AND they're not passed through. Adding pass through will be easy, I just haven't done it.  Still thinking through how to consider manipulating CCs.
 
 ## Troubleshooting

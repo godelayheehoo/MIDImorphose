@@ -75,7 +75,8 @@ Adafruit_MCP23X17 mcpMIDI;
 Adafruit_MCP23X17 mcpControls;
 //midi stuff
 #include <MIDI.h>
-MIDI_CREATE_INSTANCE(HardwareSerial, Serial8, MIDI);
+MIDI_CREATE_INSTANCE(HardwareSerial, Serial8, MIDIrx);
+MIDI_CREATE_INSTANCE(HardwareSerial, Serial5, MIDItx); 
 
 //display stuff
 //- OLED Screen
@@ -473,11 +474,11 @@ struct PitchBender {
     }
 
     void sendBend() {
-        MIDI.sendPitchBend(currentBend, channel);
+        MIDItx.sendPitchBend(currentBend, channel);
     }
 
     void finishBend() {
-        MIDI.sendPitchBend(0, channel);
+        MIDItx.sendPitchBend(0, channel);
     }
 };
 
@@ -636,6 +637,8 @@ Octave shift options:
   2: Shift on all
 */
 
+// int debugSerialCount = 0;
+
 // --- helper functions ---
 
 //properly, we should be able to just do sendNoteON, but why risk it.
@@ -665,7 +668,7 @@ void forwardNote(MidiEvent event) {
     // Serial.print(F(" channel#"));
     // Serial.println(event.channel);
     //end debug
-    MIDI.sendNoteOn(event.note, event.velocity, event.channel);
+    MIDItx.sendNoteOn(event.note, event.velocity, event.channel);
   } else if(event.type==midi::NoteOff){
     //debug
         //debug -- send note number, channel, and type
@@ -676,7 +679,7 @@ void forwardNote(MidiEvent event) {
     // Serial.print(F(" channel#"));
     // Serial.println(event.channel);
     //end debug
-    MIDI.sendNoteOff(event.note, 0, event.channel);
+    MIDItx.sendNoteOff(event.note, 0, event.channel);
   }
   else{
     Serial.print("Somehow being asked to sending note of type ");
@@ -686,7 +689,7 @@ void forwardNote(MidiEvent event) {
 
 void midiPanic() {
   for (int ch = 1; ch <= 16; ch++) {
-    MIDI.sendControlChange(123, 0, ch);
+    MIDItx.sendControlChange(123, 0, ch);
   }
 }
 
@@ -701,7 +704,7 @@ bool checkIfMIDIOn(byte channel_num){
 void killTrackedChannelsNotes(){
   for(int ch=1; ch<=16; ch++){
     if(checkIfMIDIOn(ch)){
-      MIDI.sendControlChange(123,0,ch);
+      MIDItx.sendControlChange(123,0,ch);
     }
   }
 }
@@ -764,7 +767,7 @@ byte randomOctave() {
 
 
 void handleClock() {
-    MIDI.sendRealTime(midi::Clock);
+    MIDItx.sendRealTime(midi::Clock);
 }
 
 
@@ -862,10 +865,13 @@ void setup() {
   delay(100);
 
   Serial.println(F("Turning on MIDI"));
-  MIDI.begin(MIDI_CHANNEL_OMNI);
-  MIDI.turnThruOff();
+  MIDItx.begin(MIDI_CHANNEL_OMNI);
+  MIDItx.turnThruOff();
+  MIDIrx.begin(MIDI_CHANNEL_OMNI);
+  MIDIrx.turnThruOff();
+  Serial.println(F("MIDI started"));
   
-  MIDI.setHandleClock(handleClock);
+  MIDIrx.setHandleClock(handleClock);
 
 
    //setup midi channels -- edit later for S&D arrays. This uses mcp pins
@@ -1015,15 +1021,21 @@ void setup() {
   Serial.println(F("Ending setup"));
 }
 
+
+
 void loop() {
   
   //first, we check to see if we got a clock message. If we did, we handle it and return. This still doesn't fix
   //the overwhelmed by notes problem.
-  while(MIDI.read()){
-      byte type = MIDI.getType();
+  while(MIDIrx.read()){
+
+    // debugSerialCount = max(debugSerialCount, Serial8.available());
+
+      byte type = MIDIrx.getType();
       if(type==midi::Clock){
         manglerHandleClock();
       }
+      else{
     
      //we've already checked if we have a clock
      
@@ -1031,21 +1043,21 @@ void loop() {
       
         //skip the read if we've JUST changed the stutter button state -- this doesn't apply to clock
     if (millis() - lastButtonChangeTime < 50) {
-        return;
+        continue;
       }
 
-        byte channel = MIDI.getChannel();
+        byte channel = MIDIrx.getChannel();
     
         //we still only append to the events buffer if we're tracking that midi channel, we still only forward
         //if we're not looping or not on a tracked channel. 
         //So what we'll do is always create a note 
         if (type == midi::NoteOn || type == midi::NoteOff) {
-          byte note = MIDI.getData1();
-          byte velocity = MIDI.getData2();
+          byte note = MIDIrx.getData1();
+          byte velocity = MIDIrx.getData2();
           //if we're not tracking that channel, we just forward the note.
     if(!checkIfMIDIOn(channel)){
-        MIDI.sendNoteOn(note, velocity, channel);
-        break;
+        MIDItx.sendNoteOn(note, velocity, channel);
+        // break;
        }
     else{
           //create a new midiEvent
@@ -1131,15 +1143,15 @@ void loop() {
 
       }//end this-is-a-note logic
         else{//start of this-is-not-a-note logic
-          //this print is okay because it should never happen.
+          //this print is okay because it should never happen (if it does we're probably overloaded anyway).
           Serial.print("Got non-note MIDI type ");
           Serial.println(type);
         }
       
-    
-      
+        
+      }//end this-is-not-a-clock logic 
   }  ///end new read-midi
-  //end midi processing
+//end midi processing
   
   
   //start new only-if-no-midi logic
@@ -1494,39 +1506,12 @@ if(logButton.update()){
   if(isLooping){
     Serial.print("There are ");
     Serial.print(stutterBuffer.size());
-    Serial.println(" events in stutter buffer:");
-    for(unsigned int i=0; i<stutterBuffer.size(); i++){
-      Serial.print(F("Event in buffer -- Note"));
-      if(stutterBuffer[i].type==midi::NoteOn){
-        Serial.print(F("On:"));
-      } else if(stutterBuffer[i].type==midi::NoteOff){
-        Serial.print(F("Off:"));
-      } else{
-        Serial.print(F("TypeUnknown:"));
-      }
-      Serial.print(stutterBuffer[i].note);
-      Serial.print(F(" , Ch:"));
-      Serial.print(stutterBuffer[i].channel);
-      Serial.print(F(" ,v:"));
-      Serial.print(stutterBuffer[i].velocity);
-      Serial.print(F(" ,pn:"));
-      Serial.print(stutterBuffer[i].pulseNumber);
-      Serial.print(F(" ,pt:"));
-      Serial.println(stutterBuffer[i].playTime);
-    }
+    
   }
 
-  Serial.println("Known drum machines:");
-  for(int i=0; i<numDrumMachines; i++){
-    Serial.print("Ch:");
-    Serial.print(drumMachines[i].channel);
-    Serial.print(" Instruments:");
-    for(int j=0; j<drumMachines[i].numInstruments; j++){
-      Serial.print(drumMachines[i].instrumentsLearned[j]);
-      Serial.print(" ");
-    }
-    Serial.println();
-  }
+  // Serial.print("debug serial count max: ");
+  // Serial.println(debugSerialCount);
+  // debugSerialCount = 0;
 }
   
   prevStutterPressed = stutterButtonPressed;
@@ -1900,7 +1885,7 @@ bool removeJitteredNote(byte oldNote, byte channel) {
         if (jitterBuffer[i].originalNote == oldNote &&
             jitterBuffer[i].channel == channel) {
             //turn off the jittered note
-            MIDI.sendNoteOff(jitterBuffer[i].newNote, 0, channel);
+            MIDItx.sendNoteOff(jitterBuffer[i].newNote, 0, channel);
             // shift all later elements down
             removedANote = true;
             for (int j = i; j < jitterCount - 1; j++) {
@@ -2111,7 +2096,7 @@ bool removePercolatedNote(byte oldNote, byte channel) {
         if (percBuffer[i].originalNote == oldNote &&
             percBuffer[i].channel == channel) {
             //turn off the percolated note
-            MIDI.sendNoteOff(percBuffer[i].newNote, 0, channel);
+            MIDItx.sendNoteOff(percBuffer[i].newNote, 0, channel);
             // shift all later elements down
             removedANote = true;
             for (int j = i; j < percCount - 1; j++) {
@@ -2128,7 +2113,7 @@ void clearAllPercolatedNotes() {
   //turn off all percolated notes -- this works in concert with killing all tracked channels, but covers when we change channel
   //mid stutter (not as easy now that that's done through the menu)
   for (int i = 0; i < percCount; i++) {
-      MIDI.sendNoteOff(percBuffer[i].newNote, 0, percBuffer[i].channel);
+      MIDItx.sendNoteOff(percBuffer[i].newNote, 0, percBuffer[i].channel);
   }
     percCount = 0; // clear the buffer
 }
