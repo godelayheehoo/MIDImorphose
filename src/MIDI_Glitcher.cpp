@@ -60,6 +60,9 @@ channel to off and updating.  There's nuance here though-- the stuttered notes w
 //it does affect the still incoming notes for the eventsBuffer. Could consider re-enabling jitter within the buffer
 //as well.... I'm not sure.  Probably not.
 
+
+//todo: send only clock from deluge and examine to make sure we only get clock bytes in.... something's going on here.
+
 #include <EEPROM.h>
 #include <Arduino.h>
 #include <CircularBuffer.h>
@@ -755,11 +758,10 @@ byte randomOctave() {
   return 0;                        // 0–59 → 60%
 }
 
+
 void handleClock() {
-  // Serial.print("Send clock at ");
-  // Serial.println(millis());
     MIDI.sendRealTime(midi::Clock);
-    //disabling the clock
+
 }
 
 
@@ -859,6 +861,7 @@ void setup() {
   Serial.println(F("Turning on MIDI"));
   MIDI.begin(MIDI_CHANNEL_OMNI);
   MIDI.turnThruOff();
+  
   MIDI.setHandleClock(handleClock);
 
 
@@ -1011,10 +1014,22 @@ void setup() {
 
 void loop() {
   
-
+  //first, we check to see if we got a clock message. If we did, we handle it and return. This still doesn't fix
+  //the overwhelmed by notes problem.
+  bool midiMsg = MIDI.read();
+  byte type;
+  if(midiMsg){
+      type = MIDI.getType();
+      if(type==midi::Clock){
+        manglerHandleClock();
+        return;
+      }
+  }
   
+
   //debug
-    // --- Poll keypad every 50ms ---
+    // --- Poll keypad every 50ms, only if we have no midi message ---
+if(!midiMsg){
   static unsigned long lastKeypadUpdate = 0;
   if (millis() - lastKeypadUpdate > 50) {
     keypad.update();
@@ -1286,18 +1301,15 @@ else{
   updateBufferFullBlink();
 }
 
-//Change: basically, we no longer only push to events when we're not stuttering.  We always push to events buffer.
-  //read midi
-  if(MIDI.read()){
-    //check if clock
-    byte type = MIDI.getType();
-      //clock pulse logic
-      if (type == midi::Clock) {
-        manglerHandleClock();
-        
-      }
+}//end the initial only-if-no-midi block
+
+//start midi processing
+  if(midiMsg){
+    
+     //we've already checked if we have a clock
+     
       //non-clock handling
-      else{
+      
         //skip the read if we've JUST changed the stutter button state -- this doesn't apply to clock
     if (millis() - lastButtonChangeTime < 50) {
         return;
@@ -1395,8 +1407,14 @@ else{
         }
       
     
-    }//end non-clock handling    
-  }  ///end new read-midi 
+      
+  }  ///end new read-midi
+  //end midi processing
+  
+  
+  //start new only-if-no-midi logic
+
+  if(!midiMsg){
 
   //stutter behavior. This is a first attempt, we still need to quantize the playback.
   //for now we'll just read the final pulse up until the time the button was pressed. Later we'll keep it reading until it hits the next quarter note or whatever.
@@ -1526,6 +1544,7 @@ if(logButton.update()){
     tempViewActive = false;
     drawSDMatrix(drumMIDIenabled, synthMIDIenabled);  // restore SD matrix view
 }
+  } //end only-if-no-midi block
 }
 
 //////////////////////////////////////////////////////////////////////////////////////
