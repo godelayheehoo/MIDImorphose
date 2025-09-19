@@ -74,7 +74,8 @@ channel to off and updating.  There's nuance here though-- the stuttered notes w
 //for channels and notes, so we can instantly check if a note is active.  This would use 16*128 = 2048 bits = 256 bytes per array, so 512 bytes total,
 //which is not too bad.  Would speed up lookups a lot.  Would need to make sure to update these arrays properly though.
 
-//todo: on play stop, all notes off.
+#include "NoteStructs.h"
+
 #include <EEPROM.h>
 #include <Arduino.h>
 #include <CircularBuffer.h>
@@ -379,29 +380,6 @@ ButtonHelper panicButton;
 int stretchPotPin = A17;
 
 // --- Loop buffer ---
-struct MidiEvent {
-  byte type;  // 0x90=noteOn, 0x80=noteOff, 0x00=pseudo-event
-  byte channel;
-  byte note;
-  byte velocity;
-  byte pulseNumber;
-  unsigned long playTime;  // relative time from pulse? Or maybe we should use time from the starting pulse in the ring buffer, in which case this should be abs time. Going with latter.
-  bool played;
-};
-
-// -- glitch structs --
-struct JitteredNote {
-  byte originalNote;
-  byte newNote;
-  byte channel;
-};
-
-
-struct PercNote {
-  byte originalNote;
-  byte newNote;
-  byte channel;
-};
 
 struct PitchBender {
     byte channel;
@@ -1034,6 +1012,7 @@ void loop() {
     // debugSerialCount = max(debugSerialCount, Serial8.available());
 
       byte type = MIDIrx.getType();
+     
       if(type==midi::Clock){
         manglerHandleClock();
       }
@@ -1057,6 +1036,13 @@ void loop() {
         if (type == midi::NoteOn || type == midi::NoteOff) {
           byte note = MIDIrx.getData1();
           byte velocity = MIDIrx.getData2();
+
+          // Serial.print("Received MIDI ");
+          // Serial.print((type == midi::NoteOn) ? "NoteOn" : "NoteOff");  
+          // Serial.print(" - Ch:");
+          // Serial.print(channel);
+          // Serial.print("N: ");
+          // Serial.println(note);
           //if we're not tracking that channel, we just forward the note.
     if(!checkIfMIDIOn(channel)){
         MIDItx.sendNoteOn(note, velocity, channel);
@@ -1068,6 +1054,8 @@ void loop() {
           newEvent.type = type;
           newEvent.channel = channel;
           newEvent.note = note;
+
+
 #ifdef DEBUG
             if (note > 127) {
               Serial.print(F("READ OUT OF BOUNDS NOTE:"));
