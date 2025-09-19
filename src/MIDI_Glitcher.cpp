@@ -67,6 +67,14 @@ channel to off and updating.  There's nuance here though-- the stuttered notes w
 //todo: send only clock from deluge and examine to make sure we only get clock bytes in.... something's going on here.
 //todo: investigate what other things you can turn off (using menu options) in order to reduce loop time.
 
+//todo: we could drain all the midi notes, then do ALL processing after, using the playTime to 
+//figure out relative time (just like how we do for stutter).  Allegedly this may help with e.g. clock.
+
+//todo: More aggressive lookups. Instead of storing e.g. channels and notes, we store a [16][128] bool array
+//for channels and notes, so we can instantly check if a note is active.  This would use 16*128 = 2048 bits = 256 bytes per array, so 512 bytes total,
+//which is not too bad.  Would speed up lookups a lot.  Would need to make sure to update these arrays properly though.
+
+//todo: on play stop, all notes off.
 #include <EEPROM.h>
 #include <Arduino.h>
 #include <CircularBuffer.h>
@@ -331,11 +339,9 @@ ButtonHelper logButton;
 
 //constants
 const int MAX_PULSES_PER_STUTTER = 96;  //24 pulses -> 1 quarter note
-//ChatGPT says I can get away with 8 max events per pulse. I'll try 16 for now.  Trying to cut down on memory.
 //This could be set as a function of MAX_PULSES_PER_STUTTER
 const int MAX_EVENTS = 4 * MAX_PULSES_PER_STUTTER;
-// const int MAX_EVENTS = 100; //testing
-// const int MAX_EVENTS = 5;
+
 
 
 const byte BUFFER_FULL_LED_BLINK_TIME = 20;
@@ -359,10 +365,6 @@ const byte RETRIGGER_NOTE_LENGTH = 50; //doesn't matter for drums, might for sam
 const byte PITCHBEND_PROB_1000000000 = 3; //note: this is x/a billion not x/100 like normal.  Then we do the check three times!
 const byte NUM_ACTIVE_PITCHBENDS = 4;
 const bool PITCHBEND_ACTIVE = true;
-
-// byte STUTTER_TEMPERATURE = 0; //this is used to randomly rearrange/resample notes during stutter, keeping the timing the same. 
-//this is currently NOT channel specific, which will be interesting. It does ensure that only synths are considered though.
-//this is because most note numbers for a given drum machine will be silent/empty.
 
 
 // --- LED Pins ---
@@ -394,7 +396,7 @@ struct JitteredNote {
   byte channel;
 };
 
-//hypothetical used for percolation, for note-off events primarily.
+
 struct PercNote {
   byte originalNote;
   byte newNote;
@@ -1035,8 +1037,9 @@ void loop() {
       if(type==midi::Clock){
         manglerHandleClock();
       }
-      else{
-    
+      else if (type==midi::NoteOn || type==midi::NoteOff){
+        //we handle notes below
+  
      //we've already checked if we have a clock
      
       //non-clock handling
@@ -1149,7 +1152,18 @@ void loop() {
         }
       
         
-      }//end this-is-not-a-clock logic 
+      }//end this-is-a-note logic 
+      else if(type==midi::Stop){
+        midiPanic();
+        MIDItx.sendRealTime(midi::Stop);
+      }
+      else if(type==midi::Start||type==midi::Continue){
+        MIDItx.sendRealTime((midi::MidiType)type);
+      }
+      else{
+        Serial.print("Got unexpected note type: ");
+        Serial.println((midi::MidiType)type);
+      }
   }  ///end new read-midi
 //end midi processing
   
@@ -1995,15 +2009,15 @@ MidiEvent maybeDrumJitter(MidiEvent event){
   //if we get here, we jitter.  We pick a random learned instrument from the drum machine. Like with
   //note jittering, this is allowed to be the same as the original note.
   byte newNote = pickRandomElement(drumMachine->instrumentsLearned, drumMachine->numInstruments);
-  Serial.print("New drum note: ");
+  // Serial.print("New drum note: ");
   
   //debug
-  Serial.print(F("Jittering drum note on channel "));
-  Serial.print(event.channel);
-  Serial.print(F(" from "));
-  Serial.print(event.note);
-  Serial.print(F(" to "));
-  Serial.println(newNote);
+  // Serial.print(F("Jittering drum note on channel "));
+  // Serial.print(event.channel);
+  // Serial.print(F(" from "));
+  // Serial.print(event.note);
+  // Serial.print(F(" to "));
+  // Serial.println(newNote);
   
   if(newNote!=event.note){
     event.note = newNote;

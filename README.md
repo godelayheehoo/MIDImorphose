@@ -6,7 +6,7 @@ Updates todo:
 
 ## Overview
 
-MIDI Mangler V2 is a PlatformIO-based Arduino project for the ATmega2560 (Mega) board. It manipulates MIDI events in real time, providing features such as stuttering/looping, channel filtering, timing effects, note jitter, and retriggering. The project uses a visual menu system on a TFT display for configuration, with hardware controls for performance features. Channel assignments are set using dipswitches and confirmed via the menu. Channel settings are saved to EEPROM for persistence. The project uses the FortySevenEffects MIDI library for MIDI communication.
+MIDI Mangler V2 is a PlatformIO-based Arduino project for the ATmega2560 (Mega) board. It manipulates MIDI events in real time, providing features such as stuttering/looping, channel filtering, timing effects, note jitter, and retriggering. The project uses a visual menu system on a TFT display for configuration, with hardware controls for performance features. Channel assignments are set using dipswitches and confirmed via the menu. Channel settings are saved to EEPROM for persistence. The project uses the FortySevenEffects-derived teensy MIDI library for MIDI communication.
 
 ## Features
 
@@ -28,7 +28,7 @@ MIDI Mangler V2 is a PlatformIO-based Arduino project for the ATmega2560 (Mega) 
 ## Hardware Setup
 
 - **Board:** Arduino Mega (ATmega2560)
-- **MIDI:** Uses Serial8 for MIDI input/output.
+- **MIDI:** Uses Serial 8 for MIDI input and Serial 5 for MIDI output.
 - **Buttons/Switches:**
   - Stutter switch (pin 2)
   - Panic button (pin 3)
