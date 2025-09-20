@@ -9,6 +9,16 @@ struct MidiEvent {
   byte pulseNumber;
   unsigned long playTime;  // relative time from pulse? Or maybe we should use time from the starting pulse in the ring buffer, in which case this should be abs time. Going with latter.
   bool played;
+
+    void print() const {
+    Serial.print("T: "); Serial.print(type);
+    Serial.print(", Ch: "); Serial.print(channel);
+    Serial.print(", N: "); Serial.print(note);
+    Serial.print(", V: "); Serial.print(velocity);
+    Serial.print(", PN: "); Serial.print(pulseNumber);
+    Serial.print(", PlayTime: "); Serial.print(playTime);
+    Serial.print(", Played: "); Serial.println(played);
+    }
 };
 
 // -- glitch structs --

@@ -75,7 +75,7 @@ channel to off and updating.  There's nuance here though-- the stuttered notes w
 //which is not too bad.  Would speed up lookups a lot.  Would need to make sure to update these arrays properly though.
 
 #include "NoteStructs.h"
-
+#include "MidiUtils.h"
 #include <EEPROM.h>
 #include <Arduino.h>
 #include <CircularBuffer.h>
@@ -355,6 +355,7 @@ const int MAX_INSTRUMENTS_PER_DRUM_MACHINE = 16;
 const int MAX_DRUM_MACHINES = 4;
 
 const byte JITTER_BUFFER_SIZE = 128;
+const byte DRUM_JITTER_BUFFER_SIZE = 128;
 const byte PERC_BUFFER_SIZE = 128;
 
 const byte RERETRIGGER_PROB = 50;
@@ -494,6 +495,9 @@ CircularBuffer<PitchBender, NUM_ACTIVE_PITCHBENDS> pitchbendBuffer;
 
 JitteredNote jitterBuffer[JITTER_BUFFER_SIZE];
 int jitterCount = 0;
+
+JitteredNote drumJitterBuffer[DRUM_JITTER_BUFFER_SIZE];
+int drumJitterCount = 0;
 
 PercNote percBuffer[PERC_BUFFER_SIZE];
 int percCount = 0;
@@ -1165,6 +1169,12 @@ void loop() {
   }
   //end debug
 
+
+  //first, check for shortcut buttons
+  if (keypad.lastKeyPressed == 'A') {
+    reverseMidiBuffer(stutterBuffer);
+    keypad.lastKeyPressed = 0;
+  }
   // Handle keypad input for menus using a switch statement
   if (keypad.lastKeyPressed) {
     switch (menu.currentMenu) {
@@ -1220,7 +1230,6 @@ void loop() {
     menu.handleInput(BUTTON_SELECT);
     menu.render();
     Serial.println(F("Menu Select button pressed"));
-
   }
   //end debug
 
@@ -1508,7 +1517,12 @@ if(logButton.update()){
   if(isLooping){
     Serial.print("There are ");
     Serial.print(stutterBuffer.size());
+    Serial.println(" events in the stutter buffer:");
     
+  }
+  for(int i =0; i<stutterBuffer.size(); i++){
+    MidiEvent e = stutterBuffer[i];
+    e.print();
   }
 
   // Serial.print("debug serial count max: ");
@@ -1967,12 +1981,51 @@ MidiEvent maybeNoteNumberJitter(MidiEvent event) {
     return newEvent;
 }
 
+
+// --- Add a jittered note ---
+bool addJitteredDrumNote(byte oldNote, byte newNote, byte channel) {
+    if (drumJitterCount >= DRUM_JITTER_BUFFER_SIZE) {
+        // buffer full, handle warning elsewhere (LED blink)
+        return false;
+    }
+    drumJitterBuffer[drumJitterCount++] = {oldNote, newNote, channel};
+    return true;
+}
+
+// --- Remove a note matching oldNote & channel. Send the corresponding note off for any found. ---
+bool removeJitteredDrumNote(byte oldNote, byte channel) {
+  bool removedANote = false;
+    for (int i = 0; i < drumJitterCount; i++) {
+        if (drumJitterBuffer[i].originalNote == oldNote &&
+            drumJitterBuffer[i].channel == channel) {
+            //turn off the jittered note
+            MIDItx.sendNoteOff(drumJitterBuffer[i].newNote, 0, channel);
+            // shift all later elements down
+            removedANote = true;
+            for (int j = i; j < drumJitterCount - 1; j++) {
+                drumJitterBuffer[j] = drumJitterBuffer[j + 1];
+            }
+            drumJitterCount--;
+            i--; // check new element at this position
+        }
+    }
+    return removedANote;
+}
+
 //this is a much simpler function the synth jittering because we won't worry 
 //about sending off notes.  We just assume the drum machine doesn't care about those.
 //todo: mayyyyyybe change this later. Won't be too bad to do so.
 MidiEvent maybeDrumJitter(MidiEvent event){
-  //Note we should always have at least one drum machine, since this comes after maybe learning.
-  //if it's not a note on, we're done.
+    //first, we turn off & remove past jittered notes
+    bool removedANote = removeJitteredNote(event.note, event.channel);
+    if(removedANote && event.type==midi::NoteOff){
+      //if we removed a note off, we'll just send a no-op event
+       MidiEvent newEvent;
+      newEvent.type = MIDI_NOOP;
+      newEvent.channel = 0;
+      return newEvent; 
+    }
+    //if it's some other non-note on-- a note off that we didn't remove a note for-- just return that. 
   if(!(event.type==midi::NoteOn)){return event;}
   //first, find the learned drum machine for this channel.  If it's not there, just return the original event.
   DrumMachine* drumMachine = nullptr;
