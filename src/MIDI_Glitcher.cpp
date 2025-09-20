@@ -645,23 +645,23 @@ void forwardNote(MidiEvent event) {
 
   if(event.type==midi::NoteOn){
     //debug -- send note number, channel, and type
-    // Serial.print("[");
-    // Serial.print(millis());
-    // Serial.print(F("] Forwarding NoteOn: note#"));
-    // Serial.print(event.note);
-    // Serial.print(F(" channel#"));
-    // Serial.println(event.channel);
+    Serial.print("[");
+    Serial.print(millis());
+    Serial.print(F("] Forwarding NoteOn: note#"));
+    Serial.print(event.note);
+    Serial.print(F(" channel#"));
+    Serial.println(event.channel);
     //end debug
     MIDItx.sendNoteOn(event.note, event.velocity, event.channel);
   } else if(event.type==midi::NoteOff){
     //debug
         //debug -- send note number, channel, and type
-    // Serial.print("[");
-    // Serial.print(millis());
-    // Serial.print(F("] Forwarding NoteOff: note#"));
-    // Serial.print(event.note);
-    // Serial.print(F(" channel#"));
-    // Serial.println(event.channel);
+    Serial.print("[");
+    Serial.print(millis());
+    Serial.print(F("] Forwarding NoteOff: note#"));
+    Serial.print(event.note);
+    Serial.print(F(" channel#"));
+    Serial.println(event.channel);
     //end debug
     MIDItx.sendNoteOff(event.note, 0, event.channel);
   }
@@ -1048,8 +1048,17 @@ void loop() {
           // Serial.print("N: ");
           // Serial.println(note);
           //if we're not tracking that channel, we just forward the note.
+          //note this bypasses noteForward.
     if(!checkIfMIDIOn(channel)){
+      if(type==midi::NoteOff){
+        // Serial.print("Forwarding untracked NoteOff: note#");
+        MIDItx.sendNoteOff(note, velocity, channel);
+      }
+      else if(type==midi::NoteOn){
+        // Serial.print("Forwarding untracked NoteOn: note#");
         MIDItx.sendNoteOn(note, velocity, channel);
+      }
+      // Serial.print(note);
         // break;
        }
     else{
