@@ -74,6 +74,13 @@ channel to off and updating.  There's nuance here though-- the stuttered notes w
 //for channels and notes, so we can instantly check if a note is active.  This would use 16*128 = 2048 bits = 256 bytes per array, so 512 bytes total,
 //which is not too bad.  Would speed up lookups a lot.  Would need to make sure to update these arrays properly though.
 
+//todo: randomly delay notes
+
+//todo: instead of the pitchbend approach we're currently doing, check on every clock pulse. Or better yet, set a *flag* to check on every 
+//clock pulse, but outside of the while midi read you actually do the roll. 
+
+//todo: note off dropping-- worth it?  maybe two different prob comparisons?
+
 #include "NoteStructs.h"
 #include "MidiUtils.h"
 #include <EEPROM.h>
@@ -322,7 +329,6 @@ MatrixKeypad keypad;
 //debug stuff
 #define DEBUG
 #define ACTIVE_NOTES_DEBUG
-#define PLAYBACK
 
 
 
@@ -368,7 +374,7 @@ const byte PITCHBEND_PROB_1000000000 = 3; //note: this is x/a billion not x/100 
 const byte NUM_ACTIVE_PITCHBENDS = 4;
 const bool PITCHBEND_ACTIVE = true;
 
-const byte RANDOM_DROP_PROB = 90; // 0-100, prob of dropping a note if maybeDropNote is true
+const byte RANDOM_DROP_PROB = 30; // 0-100, prob of dropping a note if maybeDropNote is true
 
 
 // --- LED Pins ---
@@ -1064,7 +1070,8 @@ void loop() {
        }
     else{
           //if maybeDropNote is true, then we roll a die. If it's above RANDOM_DROP_PROB, we return here (drop the note)
-          if(maybeDropNote){
+          //note we don't do anything with the note offs, which either never causes an issue or rarely does, not sure which.
+          if(maybeDropNote && type==midi::NoteOn){
             //roll a die
             if(randomProbResult(RANDOM_DROP_PROB)){
               continue;
@@ -1118,7 +1125,7 @@ void loop() {
           //if  we're on a tracked channel, add to buffer.  Two ifs because I expect to come back in here and add other sblocks
           
           
-          if(type == midi::NoteOn || (type == midi::NoteOff && checkForNoteOn(newEvent.note))){
+          if((type == midi::NoteOn) || (type == midi::NoteOff && checkForNoteOn(newEvent.note))){
               //check if buffer is full now
                if ((eventsBuffer.size()==MAX_EVENTS) && !isBlinking) {
                 Serial.println(F("Buffer full!"));
@@ -1388,7 +1395,7 @@ if (panicButton.update()) {
     clearStutterBuffer();
     clearStutterPulseTimes();
     //dump the events buffer into the stutter buffer (don't empty the events buffer)
-    for(int i =0; i<eventsBuffer.size(); i++){
+    for(unsigned int i =0; i<eventsBuffer.size(); i++){
       MidiEvent e = eventsBuffer[i];
       stutterBuffer.push(e);
     }
@@ -1405,13 +1412,13 @@ if (panicButton.update()) {
     
     //copy events buffer to stutter buffer
     numSynthNoteOnsInStutterBuffer = 0;
-    for(int i =0; i<stutterBuffer.size(); i++){
+    for(unsigned int i =0; i<stutterBuffer.size(); i++){
       if(stutterBuffer[i].type==midi::NoteOn && synthMIDIenabled[stutterBuffer[i].channel-1]){
         numSynthNoteOnsInStutterBuffer++;
       }
     }
     //copy pulse start times to stutter pulse start times
-    for(int i =0; i<pulseStartTimes.size(); i++){
+    for(unsigned int i =0; i<pulseStartTimes.size(); i++){
       unsigned long t = pulseStartTimes[i];
       stutterPulseStartTimes.push(t);
     }
@@ -1538,7 +1545,7 @@ if(logButton.update()){
     Serial.println(" events in the stutter buffer:");
     
   }
-  for(int i =0; i<stutterBuffer.size(); i++){
+  for(unsigned int i =0; i<stutterBuffer.size(); i++){
     MidiEvent e = stutterBuffer[i];
     e.print();
   }
