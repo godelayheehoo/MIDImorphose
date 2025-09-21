@@ -368,6 +368,8 @@ const byte PITCHBEND_PROB_1000000000 = 3; //note: this is x/a billion not x/100 
 const byte NUM_ACTIVE_PITCHBENDS = 4;
 const bool PITCHBEND_ACTIVE = true;
 
+const byte RANDOM_DROP_PROB = 90; // 0-100, prob of dropping a note if maybeDropNote is true
+
 
 // --- LED Pins ---
 const int bufferLedPin = 9; 
@@ -553,8 +555,8 @@ unsigned long lastButtonChangeTime = 0;
 MidiEvent dummyEvent;
 unsigned long dummyTime;
 int numSynthNoteOnsInStutterBuffer;
-// bool MIDIPlayState = true; //NOTE: This MAY be reversed from what it technically says!  We won't actually know if it's started or stopped when we start the arduino.
-//TODO: figure out why this isn't working.
+bool maybeDropNote = true;
+
 //midi channels
 // Map MIDI channels 1–16 to pins
 const uint8_t midiPins[16] = {
@@ -1058,10 +1060,17 @@ void loop() {
         // Serial.print("Forwarding untracked NoteOn: note#");
         MIDItx.sendNoteOn(note, velocity, channel);
       }
-      // Serial.print(note);
-        // break;
+      
        }
     else{
+          //if maybeDropNote is true, then we roll a die. If it's above RANDOM_DROP_PROB, we return here (drop the note)
+          if(maybeDropNote){
+            //roll a die
+            if(randomProbResult(RANDOM_DROP_PROB)){
+              continue;
+            }
+            
+          }         
           //create a new midiEvent
           MidiEvent newEvent = MidiEvent();
           newEvent.type = type;
@@ -1563,15 +1572,11 @@ if(logButton.update()){
 //////////////////////////////////////////////////////////////////////////////////////
 
 void clearStutterBuffer(){
-  while(stutterBuffer.size()>0){
-    stutterBuffer.pop(dummyEvent);
-  }
+  stutterBuffer.clear();
   numSynthNoteOnsInStutterBuffer = 0;
 }
 void clearStutterPulseTimes(){
-  while(stutterPulseStartTimes.size()>0){
-    stutterPulseStartTimes.pop(dummyTime);
-  }
+  stutterPulseStartTimes.clear();
 }
 
 //I'm pretty sure it's okay for this to block.
@@ -1673,7 +1678,6 @@ void clearOldNotes(int expiredPulse) {
 }
 
 MidiEvent createEmptyEvent(byte pulseNumber) {
-  //create a silent end-pulse and add to
   MidiEvent emptyEvent = MidiEvent();
   emptyEvent.type = MIDI_NOOP;
   emptyEvent.channel = 0;

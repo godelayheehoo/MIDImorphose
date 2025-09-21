@@ -61,6 +61,13 @@ public:
         return true;
     }
 
+    // Clear the buffer efficiently
+    void clear() {
+        head = 0;
+        tail = 0;
+        full = false;
+    }
+
 private:
     T buffer[Capacity];
     size_t head;
