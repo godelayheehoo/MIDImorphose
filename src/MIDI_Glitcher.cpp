@@ -1156,32 +1156,23 @@ void loop() {
               newEvent.playTime+=delay;
               delayedNotesBuffer.push(newEvent);
               DelayedNoteOn dno = DelayedNoteOn(newEvent.note, newEvent.playTime, delay);
-              Serial.print(">>>>>>>>>> ");
-              Serial.println(numDelayedOnNotes[channel-1]);
+         
               delayedOnNotes[channel-1][numDelayedOnNotes[channel-1]++] = dno;
-              Serial.print("<<<<<<<<<< ");
-              Serial.println(numDelayedOnNotes[channel-1]);
-              Serial.print("Delay for noteOn: ");
-              Serial.println(delay);
+     
               newEvent.print();
-              Serial.print("Buffer size: ");
-              Serial.println(numDelayedOnNotes[channel-1]);
+    
               continue;
             }
           }
           if (type==midi::NoteOff){
-              Serial.println("Checking for delayed on...");
+           
               DelayedNoteOn dno = checkForDelayedOn(channel, note);
-              Serial.print("Found: ");
-              Serial.print(dno.note);
-              Serial.print(", ");
-              Serial.println(channel);
+             
               if(dno.note!=255){
-                Serial.println("Found a matching off note.");
+               
                 newEvent.playTime += dno.delayTime;
                 delayedNotesBuffer.push(newEvent);
-              Serial.print("Delay for noteOff: ");  
-              Serial.print(dno.delayTime);
+
               newEvent.print();
               continue;
               }
@@ -1642,19 +1633,8 @@ if(logButton.update()){
   //print out contents of delayedOnNotes
   for(int ch=0; ch<16; ch++){
     if(numDelayedOnNotes[ch]>0){
-      Serial.print("Channel ");
-      Serial.print(ch+1);
-      Serial.print(" has ");
-      Serial.print(numDelayedOnNotes[ch]);
-      Serial.println(" delayed note ons:");
       for(int n=0; n<numDelayedOnNotes[ch]; n++){
         DelayedNoteOn dno = delayedOnNotes[ch][n];
-        Serial.print(" Note ");
-        Serial.print(dno.note);
-        Serial.print(" at time ");
-        Serial.print(dno.playTime);
-        Serial.print(" with delay ");
-        Serial.println(dno.delayTime);
       }
     }
   }
