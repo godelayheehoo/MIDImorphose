@@ -81,7 +81,17 @@ channel to off and updating.  There's nuance here though-- the stuttered notes w
 
 //todo: note off dropping-- worth it?  maybe two different prob comparisons?
 
+//todo: I could sometimes, randomly, instead of playing an active note, swap it out with one from the stutter buffer.
+//might add too much time overhead.
+
+//todo: could also randomly just play notes from the stutter buffer sometimes.
+
+//todo: min/max delay times and probability in menu
+//todo: drop probability in menu.
+
+
 #include "NoteStructs.h"
+#include "SortedBuffer.h"
 #include "MidiUtils.h"
 #include <EEPROM.h>
 #include <Arduino.h>
@@ -374,7 +384,12 @@ const byte PITCHBEND_PROB_1000000000 = 3; //note: this is x/a billion not x/100 
 const byte NUM_ACTIVE_PITCHBENDS = 4;
 const bool PITCHBEND_ACTIVE = true;
 
-const byte RANDOM_DROP_PROB = 30; // 0-100, prob of dropping a note if maybeDropNote is true
+const byte RANDOM_DROP_PROB = 0; // 0-100, prob of dropping a note if maybeDropNote is true
+
+const byte DELAY_NOTE_PROB = 20;
+const int MIN_DELAY_TIME = 500; //ms
+const int MAX_DELAY_TIME = 4000; //ms
+const byte MAX_DELAYED_NOTES = 128;
 
 
 // --- LED Pins ---
@@ -487,6 +502,18 @@ struct DrumMachine{
   }
 };
 
+struct DelayedNoteOn{
+  byte note;
+  unsigned long playTime;
+  unsigned long delayTime;
+
+  //construct from note, playtime, and delay tim
+  DelayedNoteOn(byte n, unsigned long pt, unsigned long dt) : note(n), playTime(pt), delayTime(dt) {}
+
+  //default constructor
+  DelayedNoteOn() : note(0), playTime(0), delayTime(0) {}
+};
+
 
 
 // --- Buffers ---
@@ -500,6 +527,17 @@ CircularBuffer<unsigned long, MAX_PULSES_PER_STUTTER> stutterPulseStartTimes; //
 
 CircularBuffer<MidiEvent, RETRIGGER_BUFFER_SIZE> retriggerBuffer; //maybe change this to "delayedNotesBuffer" if we end up doing that (holding back some notes for a little)
 CircularBuffer<PitchBender, NUM_ACTIVE_PITCHBENDS> pitchbendBuffer;
+
+struct PlayTimeCmp {
+    bool operator()(const MidiEvent& a, const MidiEvent& b) const {
+        return a.playTime > b.playTime;
+    }
+};
+
+SortedBuffer<MidiEvent, MAX_DELAYED_NOTES, PlayTimeCmp> delayedNotesBuffer; //sorted buffer for delayed notes
+DelayedNoteOn delayedOnNotes[16][MAX_DELAYED_NOTES/16]; //array of delayed on notes, divided by channel
+
+int numDelayedOnNotes[16] = {0};
 
 JitteredNote jitterBuffer[JITTER_BUFFER_SIZE];
 int jitterCount = 0;
@@ -653,23 +691,23 @@ void forwardNote(MidiEvent event) {
 
   if(event.type==midi::NoteOn){
     //debug -- send note number, channel, and type
-    Serial.print("[");
-    Serial.print(millis());
-    Serial.print(F("] Forwarding NoteOn: note#"));
-    Serial.print(event.note);
-    Serial.print(F(" channel#"));
-    Serial.println(event.channel);
+    // Serial.print("[");
+    // Serial.print(millis());
+    // Serial.print(F("] Forwarding NoteOn: note#"));
+    // Serial.print(event.note);
+    // Serial.print(F(" channel#"));
+    // Serial.println(event.channel);
     //end debug
     MIDItx.sendNoteOn(event.note, event.velocity, event.channel);
   } else if(event.type==midi::NoteOff){
     //debug
         //debug -- send note number, channel, and type
-    Serial.print("[");
-    Serial.print(millis());
-    Serial.print(F("] Forwarding NoteOff: note#"));
-    Serial.print(event.note);
-    Serial.print(F(" channel#"));
-    Serial.println(event.channel);
+    // Serial.print("[");
+    // Serial.print(millis());
+    // Serial.print(F("] Forwarding NoteOff: note#"));
+    // Serial.print(event.note);
+    // Serial.print(F(" channel#"));
+    // Serial.println(event.channel);
     //end debug
     MIDItx.sendNoteOff(event.note, 0, event.channel);
   }
@@ -813,6 +851,9 @@ void clearStutterPulseTimes();
 bool maybeLearnInstrument(byte channel, byte note);
 bool maybeLearnDrumMachine(byte channel);
 void refreshDrumMachines();
+
+DelayedNoteOn checkForDelayedOn(byte channelNumber, byte noteNumber);
+void playDelayedNotes();
 
 // --- State variables for pending updates ---
 bool pendingDrumChannelUpdate = false;
@@ -1076,8 +1117,10 @@ void loop() {
             if(randomProbResult(RANDOM_DROP_PROB)){
               continue;
             }
+          }
+          
             
-          }         
+                   
           //create a new midiEvent
           MidiEvent newEvent = MidiEvent();
           newEvent.type = type;
@@ -1103,6 +1146,50 @@ void loop() {
           newEvent.playTime = millis();
           newEvent.played = false;
           newEvent.pulseNumber = currentPulse;
+
+
+          //if we're not droopping a note, we may delay it.  This happens before any jittering or other processing.
+          if(randomProbResult(DELAY_NOTE_PROB)){
+            //if it's a note on, we delay it and make note of that
+            if(type==midi::NoteOn){
+              unsigned long delay = random(MIN_DELAY_TIME, MAX_DELAY_TIME);
+              newEvent.playTime+=delay;
+              delayedNotesBuffer.push(newEvent);
+              DelayedNoteOn dno = DelayedNoteOn(newEvent.note, newEvent.playTime, delay);
+              Serial.print(">>>>>>>>>> ");
+              Serial.println(numDelayedOnNotes[channel-1]);
+              delayedOnNotes[channel-1][numDelayedOnNotes[channel-1]++] = dno;
+              Serial.print("<<<<<<<<<< ");
+              Serial.println(numDelayedOnNotes[channel-1]);
+              Serial.print("Delay for noteOn: ");
+              Serial.println(delay);
+              newEvent.print();
+              Serial.print("Buffer size: ");
+              Serial.println(numDelayedOnNotes[channel-1]);
+              continue;
+            }
+          }
+          if (type==midi::NoteOff){
+              Serial.println("Checking for delayed on...");
+              DelayedNoteOn dno = checkForDelayedOn(channel, note);
+              Serial.print("Found: ");
+              Serial.print(dno.note);
+              Serial.print(", ");
+              Serial.println(channel);
+              if(dno.note!=255){
+                Serial.println("Found a matching off note.");
+                newEvent.playTime += dno.delayTime;
+                delayedNotesBuffer.push(newEvent);
+              Serial.print("Delay for noteOff: ");  
+              Serial.print(dno.delayTime);
+              newEvent.print();
+              continue;
+              }
+              
+            }
+
+
+          
 
           //if it's a drum machine, maybe learn the new note/instrument
           
@@ -1153,8 +1240,9 @@ void loop() {
           
           //if we're not looping OR we're on an untracked channel-- the contents of this block, pass through the note 
 
-          //now if we're not looping, we forward the note.
+          //now if we're not looping, we forward the note. We might delay it here.
       if(!isLooping){
+          // Serial.println("Not delaying note");
         //forward the note
         forwardNote(newEvent);
       }
@@ -1181,19 +1269,21 @@ void loop() {
         Serial.print("Got unexpected note type: ");
         Serial.println((midi::MidiType)type);
       }
-  }  ///end new read-midi
+  }  ///end new read-midi -- that's a while loop, hence no else{} here
 //end midi processing
   
+
+  //play any delayed notes that are due (really, first one only)
+  playDelayedNotes();
   
   //start new only-if-no-midi logic
 
-    static unsigned long lastKeypadUpdate = 0;
+  //check the keypad
+  static unsigned long lastKeypadUpdate = 0;
   if (millis() - lastKeypadUpdate > 50) {
     keypad.update();
     lastKeypadUpdate = millis();
   }
-  //end debug
-
 
   //first, check for shortcut buttons
   if (keypad.lastKeyPressed == 'A') {
@@ -1545,9 +1635,28 @@ if(logButton.update()){
     Serial.println(" events in the stutter buffer:");
     
   }
-  for(unsigned int i =0; i<stutterBuffer.size(); i++){
-    MidiEvent e = stutterBuffer[i];
-    e.print();
+  // for(unsigned int i =0; i<stutterBuffer.size(); i++){
+  //   MidiEvent e = stutterBuffer[i];
+  //   e.print();
+  // }
+  //print out contents of delayedOnNotes
+  for(int ch=0; ch<16; ch++){
+    if(numDelayedOnNotes[ch]>0){
+      Serial.print("Channel ");
+      Serial.print(ch+1);
+      Serial.print(" has ");
+      Serial.print(numDelayedOnNotes[ch]);
+      Serial.println(" delayed note ons:");
+      for(int n=0; n<numDelayedOnNotes[ch]; n++){
+        DelayedNoteOn dno = delayedOnNotes[ch][n];
+        Serial.print(" Note ");
+        Serial.print(dno.note);
+        Serial.print(" at time ");
+        Serial.print(dno.playTime);
+        Serial.print(" with delay ");
+        Serial.println(dno.delayTime);
+      }
+    }
   }
 
   // Serial.print("debug serial count max: ");
@@ -2277,6 +2386,44 @@ MidiEvent maybePercolateNote(MidiEvent event, byte index_number){
     return newEvent;
   }
   else{return event;}
+}
+
+//check for channel delayed note ons
+DelayedNoteOn checkForDelayedOn(byte channel, byte noteOnNumber) {
+  //loop over delayedOnNotes[channel-1].  If we we find a DelayedNoteOn with note==noteOnNumber, we remove that delayed on note and return it.
+  Serial.print("numDelayedNotes is:");
+  Serial.println(numDelayedOnNotes[channel-1]);
+  Serial.print(" Checking channel");
+  Serial.println(channel);
+  for (int i = 0; i < numDelayedOnNotes[channel-1]; i++) {
+    DelayedNoteOn delayedNoteOn = delayedOnNotes[channel-1][i];
+    Serial.print("EXAMINING: ");
+    Serial.print(delayedNoteOn.note);
+    Serial.print(" for ");
+    Serial.println(channel);
+    if (delayedNoteOn.note == noteOnNumber) {
+      Serial.println("Found a matching note inside of here");
+      //remove the found DelayedNoteOn and return it
+      for (int j = i; j < numDelayedOnNotes[channel-1] - 1; j++) {
+        delayedOnNotes[channel-1][j] = delayedOnNotes[channel-1][j + 1];
+      }
+      numDelayedOnNotes[channel-1]--;
+      return delayedNoteOn;
+    }
+  }
+  return DelayedNoteOn(255,0,0); //return an invalid DelayedNoteOn if not found
+}
+
+//play delayed notes
+void playDelayedNotes(){
+  //play all the notes that have play time <= millis(), max once per loop.
+  if(delayedNotesBuffer.size()==0){return;}
+  auto firstEvent = delayedNotesBuffer.peek();
+  if(firstEvent->playTime <= millis()){
+    forwardNote(*firstEvent);
+    delayedNotesBuffer.pop(dummyEvent);
+  }
+
 }
 
 
