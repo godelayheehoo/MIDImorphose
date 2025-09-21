@@ -1,5 +1,4 @@
 
-
 // Save menu settings to EEPROM
 #include <EEPROM.h>
 #include "MenuManager.h"
@@ -51,6 +50,18 @@ void MenuManager::saveStutterTemperature(int eepromAddr) {
 void MenuManager::saveSynthRetrigger(int eepromAddr) {
     EEPROM.write(EEPROM_ADDR_MAGIC, EEPROM_MAGIC);
     EEPROM.write(eepromAddr, retriggerSynths ? true : false);
+}
+
+void MenuManager::saveRandomDropProb(int eepromAddr) {
+    EEPROM.write(EEPROM_ADDR_MAGIC, EEPROM_MAGIC);
+    EEPROM.write(eepromAddr, randomDropProb);
+}
+
+void MenuManager::saveDelayNoteProb(int eepromAddr) {
+    EEPROM.write(EEPROM_ADDR_MAGIC, EEPROM_MAGIC);
+    EEPROM.write(eepromAddr, delayNoteProb);
+    Serial.print("saveDelayNoteProb called, value: ");
+    Serial.println(delayNoteProb);
 }
 
 
@@ -124,6 +135,21 @@ void MenuManager::handleInput(MenuButton btn) {
         // Up/down do nothing
         return;
     }
+        // Delay Note Prob menu: only '...' is selectable, select returns to main menu
+    if (currentMenu == DELAY_NOTE_PROB_MENU) {
+        if (btn == BUTTON_SELECT) {
+            currentMenu = MAIN_MENU;
+        }
+        // Up/down do nothing
+        return;
+    }
+    if (currentMenu == RANDOM_DROP_PROB_MENU) {
+        if (btn == BUTTON_SELECT) {
+            currentMenu = MAIN_MENU;
+        }
+        // Up/down do nothing
+        return;
+    }
     // Retrigger Synth menu: three options, select sets retriggerSynths and returns to main menu
     if (currentMenu == RETRIGGER_SYNTH_MENU) {
         if (btn == BUTTON_UP) {
@@ -145,7 +171,7 @@ void MenuManager::handleInput(MenuButton btn) {
     }
     switch (currentMenu) {
         case MAIN_MENU: {
-            // Now 10 items: Menu 1, Menu 2, Note Jitter Prob, Drum Jitter Prob, Retrigger Prob, Stutter Temperature, Channel Config, Stutter Length, Offset/Scale, Retrigger Synth
+            // Now 12 items: Menu 1, Menu 2, Note Jitter Prob, Drum Jitter Prob, Retrigger Prob, Random Drop Prob, Delay Note Probability, Stutter Temperature, Channel Config, Stutter Length, Offset/Scale, Retrigger Synth
             if (btn == BUTTON_UP) {
                 if (mainMenuSelectedIdx > 0) {
                     mainMenuSelectedIdx--;
@@ -154,7 +180,7 @@ void MenuManager::handleInput(MenuButton btn) {
                     }
                 }
             } else if (btn == BUTTON_DOWN) {
-                if (mainMenuSelectedIdx < 9) {
+                if (mainMenuSelectedIdx < 11) {
                     mainMenuSelectedIdx++;
                     if (mainMenuSelectedIdx > mainMenuScrollIdx + MAIN_MENU_VISIBLE_ITEMS - 1) {
                         mainMenuScrollIdx = mainMenuSelectedIdx - MAIN_MENU_VISIBLE_ITEMS + 1;
@@ -179,20 +205,26 @@ void MenuManager::handleInput(MenuButton btn) {
                     currentMenu = RETRIGGER_PROB_MENU;
                     retriggerInputBuffer = String(retriggerProb);
                 } else if (mainMenuSelectedIdx == 5) {
+                    currentMenu = RANDOM_DROP_PROB_MENU;
+                    randomDropInputBuffer = String(randomDropProb);
+                } else if (mainMenuSelectedIdx == 6) {
+                    currentMenu = DELAY_NOTE_PROB_MENU;
+                    delayNoteInputBuffer = String(delayNoteProb);
+                } else if (mainMenuSelectedIdx == 7) {
                     currentMenu = STUTTER_TEMPERATURE_MENU;
                     stutterTemperatureInputBuffer = String(stutterTemperature);
-                } else if (mainMenuSelectedIdx == 6) {
+                } else if (mainMenuSelectedIdx == 8) {
                     currentMenu = CHANNEL_CONFIG_MENU;
                     channelConfigSelectedIdx = 0;
-                } else if (mainMenuSelectedIdx == 7) {
+                } else if (mainMenuSelectedIdx == 9) {
                     currentMenu = STUTTER_LENGTH_MENU;
                     stutterLengthSelectedIdx = 0;
                     stutterLengthScrollIdx = 0;
-                } else if (mainMenuSelectedIdx == 8) {
+                } else if (mainMenuSelectedIdx == 10) {
                     currentMenu = OFFSET_MENU;
                     offsetSelectedIdx = 0;
                     offsetScrollIdx = 0;
-                } else if (mainMenuSelectedIdx == 9) {
+                } else if (mainMenuSelectedIdx == 11) {
                     currentMenu = RETRIGGER_SYNTH_MENU;
                     retriggerSynthSelectedIdx = 0;
                 }
@@ -395,11 +427,56 @@ void MenuManager::handleStutterTemperatureKeypad(char key) {
     // Ignore other keys
 }
 
+// Call this from loop() when in RANDOM_DROP_PROB_MENU
+void MenuManager::handleRandomDropProbKeypad(char key) {
+    if (currentMenu != RANDOM_DROP_PROB_MENU) return;
+    static bool inputLocked = false;
+    if (key == '*') {
+        randomDropInputBuffer = "";
+        inputLocked = false;
+    } else if (key == '#') {
+        int val = randomDropInputBuffer.toInt();
+        if (val > 100) val = 100;
+        Serial.println("Setting randomDropProb to " + String(val));
+        randomDropProb = val;
+        saveRandomDropProb(EEPROM_ADDR_RANDOM_DROP_PROB);
+        randomDropInputBuffer = String(val); // Show clamped value
+        inputLocked = true;
+    } else if (key >= '0' && key <= '9') {
+        if (!inputLocked && randomDropInputBuffer.length() < 3) {
+            randomDropInputBuffer += key;
+        }
+    }
+    // Ignore other keys
+}
+
+// Call this from loop() when in DELAY_NOTE_PROB_MENU
+void MenuManager::handleDelayNoteProbKeypad(char key) {
+    if (currentMenu != DELAY_NOTE_PROB_MENU) return;
+    static bool inputLocked = false;
+    if (key == '*') {
+        delayNoteInputBuffer = "";
+        inputLocked = false;
+    } else if (key == '#') {
+        int val = delayNoteInputBuffer.toInt();
+        if (val > 100) val = 100;
+        delayNoteProb = val;
+        saveDelayNoteProb(EEPROM_ADDR_DELAY_NOTE_PROB);
+        delayNoteInputBuffer = String(val); // Show clamped value
+        inputLocked = true;
+    } else if (key >= '0' && key <= '9') {
+        if (!inputLocked && delayNoteInputBuffer.length() < 3) {
+            delayNoteInputBuffer += key;
+        }
+    }
+    // Ignore other keys
+}
+
 void MenuManager::render() {
     if (currentMenu == MAIN_MENU) {
         // Main menu: list of menus
-        // Insert Drum Jitter Prob after Note Jitter Prob
-        const char* menus[10] = {"Menu 1", "Menu 2", "Note Jitter Prob", "Drum Jitter Prob", "Retrigger Prob", "StutterTemperature", "Channel Config", "Stutter Length", "Offset/Scale", "Retrigger Synth"};
+        // Add Delay Note Prob after Random Drop Prob
+        const char* menus[12] = {"Menu 1", "Menu 2", "Note Jitter Prob", "Drum Jitter Prob", "Retrigger Prob", "Random Drop Prob", "Delay Note Prob", "StutterTemperature", "Channel Config", "Stutter Length", "Offset/Scale", "Retrigger Synth"};
         int yStart = 10;
         tft.setTextSize(2);
         tft.setCursor(10, yStart);
@@ -409,7 +486,7 @@ void MenuManager::render() {
         // Main menu labels
         int itemIdx = mainMenuScrollIdx;
         int y = yStart;
-        for (int visible = 0; visible < MAIN_MENU_VISIBLE_ITEMS && itemIdx < 10; ++visible, ++itemIdx) {
+        for (int visible = 0; visible < MAIN_MENU_VISIBLE_ITEMS && itemIdx < 12; ++visible, ++itemIdx) {
             tft.setCursor(20, y + 30);
             if (mainMenuSelectedIdx == itemIdx) {
                 tft.setTextColor(ST77XX_BLACK, ST77XX_WHITE);
@@ -420,6 +497,67 @@ void MenuManager::render() {
             y += 30;
         }
         tft.setTextColor(ST77XX_WHITE);
+    } else if (currentMenu == RANDOM_DROP_PROB_MENU) {
+
+        tft.fillScreen(ST77XX_BLACK);
+        // Title at top
+        tft.setTextSize(2);
+        tft.setTextColor(ST77XX_WHITE);
+        tft.setCursor(10, 10);
+        tft.print("random drop prob");
+
+        // '...' at top, always highlighted
+        tft.setTextSize(2);
+        tft.setCursor(10, 40);
+        tft.setTextColor(ST77XX_BLACK, ST77XX_WHITE);
+        tft.print("...");
+
+        // Number in middle, always cyan
+        tft.setTextSize(3);
+        tft.setCursor(40, 80);
+        tft.setTextColor(ST77XX_CYAN, ST77XX_BLACK);
+        if (randomDropInputBuffer.length() > 0) {
+            tft.print(randomDropInputBuffer);
+        } else {
+            tft.print("0");
+        }
+
+        // Instructions at bottom
+        tft.setTextSize(1);
+        tft.setTextColor(ST77XX_YELLOW);
+        tft.setCursor(10, 120);
+        tft.print("press # when done, press * to restart");
+
+    } else if (currentMenu == DELAY_NOTE_PROB_MENU) {
+        tft.fillScreen(ST77XX_BLACK);
+        // Title at top
+        tft.setTextSize(2);
+        tft.setTextColor(ST77XX_WHITE);
+        tft.setCursor(10, 10);
+        tft.print("delay note prob");
+
+        // '...' at top, always highlighted
+        tft.setTextSize(2);
+        tft.setCursor(10, 40);
+        tft.setTextColor(ST77XX_BLACK, ST77XX_WHITE);
+        tft.print("...");
+
+        // Number in middle, always cyan
+        tft.setTextSize(3);
+        tft.setCursor(40, 80);
+        tft.setTextColor(ST77XX_CYAN, ST77XX_BLACK);
+        if (delayNoteInputBuffer.length() > 0) {
+            tft.print(delayNoteInputBuffer);
+        } else {
+            tft.print("0");
+        }
+
+        // Instructions at bottom
+        tft.setTextSize(1);
+        tft.setTextColor(ST77XX_YELLOW);
+        tft.setCursor(10, 120);
+        tft.print("press # when done, press * to restart");
+    
     } else if (currentMenu == DRUM_JITTER_PROB_MENU) {
         tft.fillScreen(ST77XX_BLACK);
         // Title at top
@@ -751,6 +889,35 @@ void MenuManager::render() {
         tft.setTextColor(ST77XX_CYAN, ST77XX_BLACK);
         if (retriggerInputBuffer.length() > 0) {
             tft.print(retriggerInputBuffer);
+        } else {
+            tft.print("0");
+        }
+
+        // Instructions at bottom
+        tft.setTextSize(1);
+        tft.setTextColor(ST77XX_YELLOW);
+        tft.setCursor(10, 120);
+        tft.print("press # when done, press * to restart");
+    } else if (currentMenu == DELAY_NOTE_PROB_MENU) {
+        tft.fillScreen(ST77XX_BLACK);
+        // Title at top
+        tft.setTextSize(2);
+        tft.setTextColor(ST77XX_WHITE);
+        tft.setCursor(10, 10);
+        tft.print("delay note prob");
+
+        // '...' at top, always highlighted
+        tft.setTextSize(2);
+        tft.setCursor(10, 40);
+        tft.setTextColor(ST77XX_BLACK, ST77XX_WHITE);
+        tft.print("...");
+
+        // Number in middle, always cyan
+        tft.setTextSize(3);
+        tft.setCursor(40, 80);
+        tft.setTextColor(ST77XX_CYAN, ST77XX_BLACK);
+        if (delayNoteInputBuffer.length() > 0) {
+            tft.print(delayNoteInputBuffer);
         } else {
             tft.print("0");
         }

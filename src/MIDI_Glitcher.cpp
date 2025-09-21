@@ -384,9 +384,6 @@ const byte PITCHBEND_PROB_1000000000 = 3; //note: this is x/a billion not x/100 
 const byte NUM_ACTIVE_PITCHBENDS = 4;
 const bool PITCHBEND_ACTIVE = true;
 
-const byte RANDOM_DROP_PROB = 0; // 0-100, prob of dropping a note if maybeDropNote is true
-
-const byte DELAY_NOTE_PROB = 20;
 const int MIN_DELAY_TIME = 500; //ms
 const int MAX_DELAY_TIME = 4000; //ms
 const byte MAX_DELAYED_NOTES = 128;
@@ -980,7 +977,8 @@ void setup() {
   menu.retriggerProb = EEPROM.read(EEPROM_ADDR_RETRIGGER_PROB);
   menu.stutterTemperature = EEPROM.read(EEPROM_ADDR_STUTTER_TEMPERATURE);
   menu.retriggerSynths = EEPROM.read(EEPROM_ADDR_SYNTH_RETRIGGER);
-  
+  menu.randomDropProb = EEPROM.read(EEPROM_ADDR_RANDOM_DROP_PROB);
+  menu.delayNoteProb = EEPROM.read(EEPROM_ADDR_DELAY_NOTE_PROB);
 
   Serial.print("Loaded noteJitterProb from EEPROM: ");
   Serial.println(menu.noteJitterProb);
@@ -1010,6 +1008,8 @@ void setup() {
   menu.retriggerProb = 10;
   menu.stutterTemperature = 0;
   menu.retriggerSynths = false;
+  menu.randomDropProb = 0;
+  menu.delayNoteProb = 0;
     // Immediately save defaults to EEPROM so future boots load correct values
     EEPROM.write(EEPROM_ADDR_MAGIC, EEPROM_MAGIC);
     EEPROM.put(EEPROM_ADDR_DRUM_STATE, drumState);
@@ -1023,6 +1023,8 @@ void setup() {
   menu.saveRetriggerProb(EEPROM_ADDR_RETRIGGER_PROB);
   menu.saveStutterTemperature(EEPROM_ADDR_STUTTER_TEMPERATURE);
   menu.saveSynthRetrigger(EEPROM_ADDR_SYNTH_RETRIGGER);
+  menu.saveRandomDropProb(EEPROM_ADDR_RANDOM_DROP_PROB);
+  menu.saveDelayNoteProb(EEPROM_ADDR_DELAY_NOTE_PROB);
 
     //create drum machines on startup. TODO: functionality to relearn drum machines when we update
     //drumMachineMIDIEnabled
@@ -1110,11 +1112,11 @@ void loop() {
       
        }
     else{
-          //if maybeDropNote is true, then we roll a die. If it's above RANDOM_DROP_PROB, we return here (drop the note)
+          //if maybeDropNote is true, then we roll a die. If it's above menu.randomDropProb, we return here (drop the note)
           //note we don't do anything with the note offs, which either never causes an issue or rarely does, not sure which.
           if(maybeDropNote && type==midi::NoteOn){
             //roll a die
-            if(randomProbResult(RANDOM_DROP_PROB)){
+            if(randomProbResult(menu.randomDropProb)){
               continue;
             }
           }
@@ -1149,7 +1151,7 @@ void loop() {
 
 
           //if we're not droopping a note, we may delay it.  This happens before any jittering or other processing.
-          if(randomProbResult(DELAY_NOTE_PROB)){
+          if(randomProbResult(menu.delayNoteProb)){
             //if it's a note on, we delay it and make note of that
             if(type==midi::NoteOn){
               unsigned long delay = random(MIN_DELAY_TIME, MAX_DELAY_TIME);
@@ -1164,7 +1166,7 @@ void loop() {
               continue;
             }
           }
-          if (type==midi::NoteOff){
+          if (type==midi::NoteOff && menu.delayNoteProb>0){
            
               DelayedNoteOn dno = checkForDelayedOn(channel, note);
              
@@ -1301,6 +1303,16 @@ void loop() {
         break;
       case STUTTER_TEMPERATURE_MENU:
         menu.handleStutterTemperatureKeypad(keypad.lastKeyPressed);
+        menu.render();
+        keypad.lastKeyPressed = 0;
+        break;
+      case RANDOM_DROP_PROB_MENU:
+        menu.handleRandomDropProbKeypad(keypad.lastKeyPressed);
+        menu.render();
+        keypad.lastKeyPressed = 0;
+        break;
+      case DELAY_NOTE_PROB_MENU:
+        menu.handleDelayNoteProbKeypad(keypad.lastKeyPressed);
         menu.render();
         keypad.lastKeyPressed = 0;
         break;
@@ -2371,18 +2383,9 @@ MidiEvent maybePercolateNote(MidiEvent event, byte index_number){
 //check for channel delayed note ons
 DelayedNoteOn checkForDelayedOn(byte channel, byte noteOnNumber) {
   //loop over delayedOnNotes[channel-1].  If we we find a DelayedNoteOn with note==noteOnNumber, we remove that delayed on note and return it.
-  Serial.print("numDelayedNotes is:");
-  Serial.println(numDelayedOnNotes[channel-1]);
-  Serial.print(" Checking channel");
-  Serial.println(channel);
   for (int i = 0; i < numDelayedOnNotes[channel-1]; i++) {
     DelayedNoteOn delayedNoteOn = delayedOnNotes[channel-1][i];
-    Serial.print("EXAMINING: ");
-    Serial.print(delayedNoteOn.note);
-    Serial.print(" for ");
-    Serial.println(channel);
     if (delayedNoteOn.note == noteOnNumber) {
-      Serial.println("Found a matching note inside of here");
       //remove the found DelayedNoteOn and return it
       for (int j = i; j < numDelayedOnNotes[channel-1] - 1; j++) {
         delayedOnNotes[channel-1][j] = delayedOnNotes[channel-1][j + 1];

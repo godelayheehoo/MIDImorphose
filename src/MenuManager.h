@@ -10,6 +10,8 @@ enum MenuState {
     NOTE_JITTER_PROB_MENU,
     DRUM_JITTER_PROB_MENU,
     RETRIGGER_PROB_MENU,
+    RANDOM_DROP_PROB_MENU,
+    DELAY_NOTE_PROB_MENU,
     CHANNEL_CONFIG_MENU,
     STUTTER_LENGTH_MENU,
     OFFSET_MENU,
@@ -72,7 +74,9 @@ public:
     void handleJitterKeypad(char key); // For NOTE_JITTER_PROB_MENU
     void handleDrumJitterKeypad(char key); // For DRUM_JITTER_PROB_MENU
     void handleRetriggerKeypad(char key); // For RETRIGGER_PROB_MENU
+    void handleRandomDropProbKeypad(char key); // For RANDOM_DROP_PROB_MENU
     void handleStutterTemperatureKeypad(char key); // For STUTTER_TEMPERATURE_MENU
+    void handleDelayNoteProbKeypad(char key); // For DELAY_NOTE_PROB_MENU
     MenuState currentMenu;
     // Flag for requesting channel defaults reset
     bool pendingChannelDefaultsReset = false;
@@ -88,6 +92,8 @@ public:
     void saveRetriggerProb(int eepromAddr);
     void saveStutterTemperature(int eepromAddr);
     void saveSynthRetrigger(int eepromAddr);
+    void saveRandomDropProb(int eepromAddr);
+    void saveDelayNoteProb(int eepromAddr);
 public:
     Adafruit_ST7789& tft;
     // Main menu selection
@@ -120,6 +126,12 @@ public:
     // Stutter Temperature menu
     String stutterTemperatureInputBuffer = "";
     int stutterTemperature = 0;
+    // Random Drop Probability menu
+    String randomDropInputBuffer = "";
+    int randomDropProb = 0;
+    // Delay Note Probability menu
+    String delayNoteInputBuffer = "";
+    int delayNoteProb = 0;
     // No selection index needed; only '...' is selectable
     // Stutter Length menu selection
     int stutterLengthSelectedIdx = 0; // 0 = '...', 1-16 = options

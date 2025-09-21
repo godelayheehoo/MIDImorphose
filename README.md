@@ -120,6 +120,8 @@ The TFT display provides a visual menu system for configuration:
 - If OLED fails to initialize, the program halts.
 - If buffer is full, LED blinks and oldest notes are dropped.
 - MIDI Panic can be used to reset all notes.
+- There's various ways that notes can get stuck on if you turn things on or off midevent. For instances,
+setting the delay probability to zero before a note off for a delayed note on arrives, the note on will get stuck until the next note event. The panic button is always available. 
 
 ## License
 
