@@ -380,7 +380,9 @@ const byte RETRIGGER_BUFFER_SIZE = 64;
 const byte RETRIGGER_TIME = 100; //todo: make this different for drums and synths? 50 is fine for drums, too fast for synths.
 const byte RETRIGGER_NOTE_LENGTH = 50; //doesn't matter for drums, might for samples, does for synth
 
-const byte PITCHBEND_PROB_1000000000 = 3; //note: this is x/a billion not x/100 like normal.  Then we do the check three times!
+const byte PITCHBEND_PROB_PER_PULSE_10000 = 3; //note: this is x/10000, calculated once per clock pulse. 
+// at 1/10000, after four full notes the chance of at least one bend occurring is ~0.04.  At 10/10000, it's ~0.32.
+
 const byte NUM_ACTIVE_PITCHBENDS = 4;
 const bool PITCHBEND_ACTIVE = true;
 
@@ -597,6 +599,7 @@ MidiEvent dummyEvent;
 unsigned long dummyTime;
 int numSynthNoteOnsInStutterBuffer;
 bool maybeDropNote = true;
+bool haveSeenClock = false;
 
 //midi channels
 // Map MIDI channels 1–16 to pins
@@ -795,6 +798,7 @@ byte randomOctave() {
 
 void handleClock() {
     MIDItx.sendRealTime(midi::Clock);
+    haveSeenClock = true;
 }
 
 
@@ -1265,6 +1269,24 @@ void loop() {
   }  ///end new read-midi -- that's a while loop, hence no else{} here
 //end midi processing
   
+//general stuff we'll use that gets done only per-clock-pulse.
+  if(haveSeenClock){
+    
+    //roll for a possible pitchbend
+  if(PITCHBEND_ACTIVE){
+    //maybe create a new pitchbender
+    if(randomProbResult(PITCHBEND_PROB_PER_PULSE_10000, 10000)){
+      byte bendChannel = getRandomActiveChannel(synthMIDIenabled);
+      if(bendChannel!=255){
+      pushBend(bendChannel);
+      }
+      // Serial.println(bendChannel);
+    }
+    updateBends();
+    }
+
+    haveSeenClock = false;
+  }
 
   //play any delayed notes that are due (really, first one only)
   playDelayedNotes();
@@ -1540,17 +1562,6 @@ if (panicButton.update()) {
 if(isLooping){}
 //pre-note nonloop logic
 else{
-  if(PITCHBEND_ACTIVE){
-  //maybe create a new pitchbender
-  if(randomProbResult(PITCHBEND_PROB_1000000000, 1000000000)&&randomProbResult(PITCHBEND_PROB_1000000000, 1000000000)&&randomProbResult(PITCHBEND_PROB_1000000000, 1000000000)){
-    byte bendChannel = getRandomActiveChannel(synthMIDIenabled);
-    if(bendChannel!=255){
-    pushBend(bendChannel);
-    }
-    // Serial.println(bendChannel);
-  }
-  updateBends();
-  }
   // check if pulseREsolution buffer is full
   checkPulseBufferFullSetLED();
   updateBufferFullBlink();
@@ -2017,23 +2028,20 @@ bool addJitteredNote(byte oldNote, byte newNote, byte channel) {
 
 // --- Remove a note matching oldNote & channel. Send the corresponding note off for any found. ---
 bool removeJitteredNote(byte oldNote, byte channel) {
-  bool removedANote = false;
+    bool removed = false;
     for (int i = 0; i < jitterCount; i++) {
         if (jitterBuffer[i].originalNote == oldNote &&
             jitterBuffer[i].channel == channel) {
-            //turn off the jittered note
             MIDItx.sendNoteOff(jitterBuffer[i].newNote, 0, channel);
-            // shift all later elements down
-            removedANote = true;
-            for (int j = i; j < jitterCount - 1; j++) {
-                jitterBuffer[j] = jitterBuffer[j + 1];
-            }
+            jitterBuffer[i] = jitterBuffer[jitterCount - 1];
             jitterCount--;
-            i--; // check new element at this position
+            i--; // check swapped element
+            removed = true;
         }
     }
-    return removedANote;
+    return removed;
 }
+
 
 // --- Find newNote(s) for a given oldNote & channel ---
 //not going to use this function I think.  Leaving it for now so I can copy its logic
@@ -2115,23 +2123,22 @@ bool addJitteredDrumNote(byte oldNote, byte newNote, byte channel) {
 
 // --- Remove a note matching oldNote & channel. Send the corresponding note off for any found. ---
 bool removeJitteredDrumNote(byte oldNote, byte channel) {
-  bool removedANote = false;
+    bool removedANote = false;
     for (int i = 0; i < drumJitterCount; i++) {
         if (drumJitterBuffer[i].originalNote == oldNote &&
             drumJitterBuffer[i].channel == channel) {
-            //turn off the jittered note
+            // turn off the jittered note
             MIDItx.sendNoteOff(drumJitterBuffer[i].newNote, 0, channel);
-            // shift all later elements down
-            removedANote = true;
-            for (int j = i; j < drumJitterCount - 1; j++) {
-                drumJitterBuffer[j] = drumJitterBuffer[j + 1];
-            }
+            // swap with last element instead of shifting
+            drumJitterBuffer[i] = drumJitterBuffer[drumJitterCount - 1];
             drumJitterCount--;
-            i--; // check new element at this position
+            i--; // check the swapped element
+            removedANote = true;
         }
     }
     return removedANote;
 }
+
 
 //this is a much simpler function the synth jittering because we won't worry 
 //about sending off notes.  We just assume the drum machine doesn't care about those.
@@ -2380,23 +2387,19 @@ MidiEvent maybePercolateNote(MidiEvent event, byte index_number){
   else{return event;}
 }
 
-//check for channel delayed note ons
+//optimized check, swaps found note with last element and decrements count
 DelayedNoteOn checkForDelayedOn(byte channel, byte noteOnNumber) {
-  //loop over delayedOnNotes[channel-1].  If we we find a DelayedNoteOn with note==noteOnNumber, we remove that delayed on note and return it.
-  for (int i = 0; i < numDelayedOnNotes[channel-1]; i++) {
-    DelayedNoteOn delayedNoteOn = delayedOnNotes[channel-1][i];
-    if (delayedNoteOn.note == noteOnNumber) {
-      //remove the found DelayedNoteOn and return it
-      for (int j = i; j < numDelayedOnNotes[channel-1] - 1; j++) {
-        delayedOnNotes[channel-1][j] = delayedOnNotes[channel-1][j + 1];
-      }
-      numDelayedOnNotes[channel-1]--;
-      return delayedNoteOn;
+    for (int i = 0; i < numDelayedOnNotes[channel-1]; i++) {
+        if (delayedOnNotes[channel-1][i].note == noteOnNumber) {
+            DelayedNoteOn found = delayedOnNotes[channel-1][i];
+            // swap with last element instead of shifting
+            delayedOnNotes[channel-1][i] = delayedOnNotes[channel-1][numDelayedOnNotes[channel-1]-1];
+            numDelayedOnNotes[channel-1]--;
+            return found;
+        }
     }
-  }
-  return DelayedNoteOn(255,0,0); //return an invalid DelayedNoteOn if not found
+    return DelayedNoteOn(255,0,0);
 }
-
 //play delayed notes
 void playDelayedNotes(){
   //play all the notes that have play time <= millis(), max once per loop.
