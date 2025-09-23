@@ -74,11 +74,6 @@ channel to off and updating.  There's nuance here though-- the stuttered notes w
 //for channels and notes, so we can instantly check if a note is active.  This would use 16*128 = 2048 bits = 256 bytes per array, so 512 bytes total,
 //which is not too bad.  Would speed up lookups a lot.  Would need to make sure to update these arrays properly though.
 
-//todo: randomly delay notes
-
-//todo: instead of the pitchbend approach we're currently doing, check on every clock pulse. Or better yet, set a *flag* to check on every 
-//clock pulse, but outside of the while midi read you actually do the roll. 
-
 //todo: note off dropping-- worth it?  maybe two different prob comparisons?
 
 //todo: I could sometimes, randomly, instead of playing an active note, swap it out with one from the stutter buffer.
@@ -89,7 +84,11 @@ channel to off and updating.  There's nuance here though-- the stuttered notes w
 //todo: min/max delay times and probability in menu
 //todo: drop probability in menu.
 
+//todo: random arping? probably have to limit this to be during stutter only and/or limited to one synth at a time,
+//which is awkward from a UI perspective.  Basically you have to track **all* on notes, and when >2 notes is received in a channel,
+//arp it.  Which.... gets rough.  Maybe try this out as its own tool on a mega first. 
 
+//add pitch bend prob now that we control it beter. Logarithmic?
 #include "NoteStructs.h"
 #include "SortedBuffer.h"
 #include "MidiUtils.h"
