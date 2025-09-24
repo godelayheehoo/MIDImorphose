@@ -16,7 +16,8 @@ enum MenuState {
     STUTTER_LENGTH_MENU,
     OFFSET_MENU,
     STUTTER_TEMPERATURE_MENU,
-    RETRIGGER_SYNTH_MENU
+    RETRIGGER_SYNTH_MENU,
+    PITCHBEND_PROB_MENU
 };
 // Offset sets and labels
 struct OffsetSet {
@@ -77,6 +78,7 @@ public:
     void handleRandomDropProbKeypad(char key); // For RANDOM_DROP_PROB_MENU
     void handleStutterTemperatureKeypad(char key); // For STUTTER_TEMPERATURE_MENU
     void handleDelayNoteProbKeypad(char key); // For DELAY_NOTE_PROB_MENU
+    void handlePitchbendProbKeypad(char key); // For PITCHBEND_PROB_MENU
     MenuState currentMenu;
     // Flag for requesting channel defaults reset
     bool pendingChannelDefaultsReset = false;
@@ -94,6 +96,7 @@ public:
     void saveSynthRetrigger(int eepromAddr);
     void saveRandomDropProb(int eepromAddr);
     void saveDelayNoteProb(int eepromAddr);
+    void savePitchbendProb(int eepromAddr);
     // Flag to request restoreDefaults from main loop
     bool readyToRestoreDefaults = false;
 public:
@@ -120,20 +123,23 @@ public:
     int menuBActiveIdx = 1; // Active option, initially Option A (index 1)
     // Note Jitter Prob menu
     String jitterInputBuffer = "";
-    int noteJitterProb = 0;
+    byte noteJitterProb = 0;
     String drumJitterInputBuffer = "";
-    int drumJitterProb = 0;
+    byte drumJitterProb = 0;
     String retriggerInputBuffer = "";
-    int retriggerProb = 10;
+    byte retriggerProb = 10;
     // Stutter Temperature menu
     String stutterTemperatureInputBuffer = "";
-    int stutterTemperature = 0;
+    byte stutterTemperature = 0;
     // Random Drop Probability menu
     String randomDropInputBuffer = "";
-    int randomDropProb = 0;
+    byte randomDropProb = 0;
     // Delay Note Probability menu
     String delayNoteInputBuffer = "";
-    int delayNoteProb = 0;
+    byte delayNoteProb = 0;
+    // Pitchbend Probability menu
+    String pitchbendProbInputBuffer = "";
+    unsigned int pitchbendProb = 0;
     // No selection index needed; only '...' is selectable
     // Stutter Length menu selection
     int stutterLengthSelectedIdx = 0; // 0 = '...', 1-16 = options

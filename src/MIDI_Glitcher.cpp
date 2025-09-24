@@ -94,6 +94,8 @@ channel to off and updating.  There's nuance here though-- the stuttered notes w
 //a little "wrong" some times, so it'll be glitchy.
 
 //note delay by pulse Number instead? gets tricky, because off notes still need to be tied to time probably?  I guess could do them to the nearest pulse as well, shouldn't be that different. 
+
+//rework pitchbend menu to explain what ~prob is.
 #include "NoteStructs.h"
 #include "SortedBuffer.h"
 #include "MidiUtils.h"
@@ -384,12 +386,12 @@ const byte RETRIGGER_BUFFER_SIZE = 64;
 const byte RETRIGGER_TIME = 100; //todo: make this different for drums and synths? 50 is fine for drums, too fast for synths.
 const byte RETRIGGER_NOTE_LENGTH = 50; //doesn't matter for drums, might for samples, does for synth
 
-const byte PITCHBEND_PROB_PER_PULSE_10000 = 3; //note: this is x/100000, calculated once per clock pulse. 
+// const byte PITCHBEND_PROB_PER_PULSE_10000 = 3; //note: this is x/100000, calculated once per clock pulse. 
 // at 1/100000, after four full notes the chance of at least one bend occurring is ~0.04.  At 10/100000, it's ~0.32.
 //these numbers were written for 1/10000
 
 const byte NUM_ACTIVE_PITCHBENDS = 4;
-const bool PITCHBEND_ACTIVE = true;
+// const bool PITCHBEND_ACTIVE = true;
 
 const int MIN_DELAY_TIME = 500; //ms
 const int MAX_DELAY_TIME = 4000; //ms
@@ -833,6 +835,7 @@ void restoreDefaults() {
   menu.retriggerSynths = false;
   menu.randomDropProb = 0;
   menu.delayNoteProb = 0;
+  menu.pitchbendProb = 0;
     // Immediately save defaults to EEPROM so future boots load correct values
     EEPROM.write(EEPROM_ADDR_MAGIC, EEPROM_MAGIC);
     EEPROM.put(EEPROM_ADDR_DRUM_STATE, drumState);
@@ -848,6 +851,7 @@ void restoreDefaults() {
   menu.saveSynthRetrigger(EEPROM_ADDR_SYNTH_RETRIGGER);
   menu.saveRandomDropProb(EEPROM_ADDR_RANDOM_DROP_PROB);
   menu.saveDelayNoteProb(EEPROM_ADDR_DELAY_NOTE_PROB);
+  menu.savePitchbendProb(EEPROM_ADDR_PITCHBEND_PROB);
 
 }
 
@@ -1031,6 +1035,7 @@ void setup() {
   menu.retriggerSynths = EEPROM.read(EEPROM_ADDR_SYNTH_RETRIGGER);
   menu.randomDropProb = EEPROM.read(EEPROM_ADDR_RANDOM_DROP_PROB);
   menu.delayNoteProb = EEPROM.read(EEPROM_ADDR_DELAY_NOTE_PROB);
+  menu.pitchbendProb = EEPROM.read(EEPROM_ADDR_PITCHBEND_PROB);
 
   Serial.print("Loaded noteJitterProb from EEPROM: ");
   Serial.println(menu.noteJitterProb);
@@ -1283,9 +1288,9 @@ void loop() {
   if(haveSeenClock){
     
     //roll for a possible pitchbend
-  if(PITCHBEND_ACTIVE){
+  if(menu.pitchbendProb>0){
     //maybe create a new pitchbender
-    if(randomProbResult(PITCHBEND_PROB_PER_PULSE_10000, 10000)){
+    if(randomProbResult(menu.pitchbendProb, 100000)){
       byte bendChannel = getRandomActiveChannel(synthMIDIenabled);
       if(bendChannel!=255){
       pushBend(bendChannel);
@@ -1351,6 +1356,11 @@ void loop() {
         break;
       case DELAY_NOTE_PROB_MENU:
         menu.handleDelayNoteProbKeypad(keypad.lastKeyPressed);
+        menu.render();
+        keypad.lastKeyPressed = 0;
+        break;
+      case PITCHBEND_PROB_MENU:
+        menu.handlePitchbendProbKeypad(keypad.lastKeyPressed);
         menu.render();
         keypad.lastKeyPressed = 0;
         break;
@@ -1686,8 +1696,8 @@ if(logButton.update()){
   prevStutterPressed = stutterButtonPressed;
   prevLooping = isLooping;
   oldPulseResolution = menu.pulseResolution;
-  
-  if(PITCHBEND_ACTIVE){
+
+  if(menu.pitchbendProb>0){
   pruneBends();
   }
   

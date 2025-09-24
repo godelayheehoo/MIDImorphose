@@ -3,6 +3,8 @@
 
 Updates todo:
 - explain the rolling stutter buffer now.
+- List out the defaults that restore defaults restores.
+
 
 ## Overview
 

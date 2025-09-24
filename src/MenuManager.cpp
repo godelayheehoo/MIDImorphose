@@ -64,6 +64,18 @@ void MenuManager::saveDelayNoteProb(int eepromAddr) {
     Serial.println(delayNoteProb);
 }
 
+void MenuManager::saveRandomDropProb(int eepromAddr) {
+    EEPROM.write(EEPROM_ADDR_MAGIC, EEPROM_MAGIC);
+    EEPROM.write(eepromAddr, randomDropProb);
+}
+
+void MenuManager::savePitchbendProb(int eepromAddr) {
+    EEPROM.write(EEPROM_ADDR_MAGIC, EEPROM_MAGIC);
+    EEPROM.write(eepromAddr, pitchbendProb);
+    Serial.print("savePitchbendProb called, value: ");
+    Serial.println(pitchbendProb);
+}
+
 
 
 MenuManager::MenuManager(Adafruit_ST7789& display) : tft(display), currentMenu(MAIN_MENU) {
@@ -150,6 +162,13 @@ void MenuManager::handleInput(MenuButton btn) {
         // Up/down do nothing
         return;
     }
+     if (currentMenu == PITCHBEND_PROB_MENU) {
+        if (btn == BUTTON_SELECT) {
+            currentMenu = MAIN_MENU;
+        }
+        // Up/down do nothing
+        return;
+    }
     // Retrigger Synth menu: three options, select sets retriggerSynths and returns to main menu
     if (currentMenu == RETRIGGER_SYNTH_MENU) {
         if (btn == BUTTON_UP) {
@@ -171,7 +190,7 @@ void MenuManager::handleInput(MenuButton btn) {
     }
     switch (currentMenu) {
         case MAIN_MENU: {
-            // Now 13 items: Menu 1, Menu 2, Note Jitter Prob, Drum Jitter Prob, Retrigger Prob, Random Drop Prob, Delay Note Probability, Stutter Temperature, Channel Config, Stutter Length, Offset/Scale, Retrigger Synth, Restore Defaults
+            // Now 14 items: add ptchbnd ~prob before Restore Defaults
             if (btn == BUTTON_UP) {
                 if (mainMenuSelectedIdx > 0) {
                     mainMenuSelectedIdx--;
@@ -180,7 +199,7 @@ void MenuManager::handleInput(MenuButton btn) {
                     }
                 }
             } else if (btn == BUTTON_DOWN) {
-                if (mainMenuSelectedIdx < 12) {
+                if (mainMenuSelectedIdx < 13) {
                     mainMenuSelectedIdx++;
                     if (mainMenuSelectedIdx > mainMenuScrollIdx + MAIN_MENU_VISIBLE_ITEMS - 1) {
                         mainMenuScrollIdx = mainMenuSelectedIdx - MAIN_MENU_VISIBLE_ITEMS + 1;
@@ -228,6 +247,9 @@ void MenuManager::handleInput(MenuButton btn) {
                     currentMenu = RETRIGGER_SYNTH_MENU;
                     retriggerSynthSelectedIdx = 0;
                 } else if (mainMenuSelectedIdx == 12) {
+                    currentMenu = PITCHBEND_PROB_MENU;
+                    pitchbendProbInputBuffer = String(pitchbendProb);
+                } else if (mainMenuSelectedIdx == 13) {
                     // Restore Defaults selected
                     readyToRestoreDefaults = true;
                 }
@@ -475,11 +497,32 @@ void MenuManager::handleDelayNoteProbKeypad(char key) {
     // Ignore other keys
 }
 
+void MenuManager::handlePitchbendProbKeypad(char key) {
+    if (currentMenu != DELAY_NOTE_PROB_MENU) return;
+    static bool inputLocked = false;
+    if (key == '*') {
+        pitchbendProbInputBuffer= "";
+        inputLocked = false;
+    } else if (key == '#') {
+        int val = pitchbendProbInputBuffer.toInt();
+        if (val > 100000) val = 100000;
+        pitchbendProb = val;
+        savePitchbendProb(EEPROM_ADDR_PITCHBEND_PROB);
+        pitchbendProbInputBuffer = String(val); // Show clamped value
+        inputLocked = true;
+    } else if (key >= '0' && key <= '9') {
+        if (!inputLocked && pitchbendProbInputBuffer.length() < 3) {
+            pitchbendProbInputBuffer += key;
+        }
+    }
+    // Ignore other keys
+}
+
 void MenuManager::render() {
     if (currentMenu == MAIN_MENU) {
         // Main menu: list of menus
-        // Add Delay Note Prob after Random Drop Prob, and Restore Defaults at the end
-        const char* menus[13] = {"Menu 1", "Menu 2", "Note Jitter Prob", "Drum Jitter Prob", "Retrigger Prob", "Random Drop Prob", "Delay Note Prob", "StutterTemperature", "Channel Config", "Stutter Length", "Offset/Scale", "Retrigger Synth", "Restore Defaults"};
+        // Add ptchbnd ~prob before Restore Defaults
+        const char* menus[14] = {"Menu 1", "Menu 2", "Note Jitter Prob", "Drum Jitter Prob", "Retrigger Prob", "Random Drop Prob", "Delay Note Prob", "StutterTemperature", "Channel Config", "Stutter Length", "Offset/Scale", "Retrigger Synth", "ptchbnd ~prob", "Restore Defaults"};
         int yStart = 10;
         tft.setTextSize(2);
         tft.setCursor(10, yStart);
@@ -489,7 +532,7 @@ void MenuManager::render() {
         // Main menu labels
         int itemIdx = mainMenuScrollIdx;
         int y = yStart;
-        for (int visible = 0; visible < MAIN_MENU_VISIBLE_ITEMS && itemIdx < 13; ++visible, ++itemIdx) {
+        for (int visible = 0; visible < MAIN_MENU_VISIBLE_ITEMS && itemIdx < 14; ++visible, ++itemIdx) {
             tft.setCursor(20, y + 30);
             if (mainMenuSelectedIdx == itemIdx) {
                 tft.setTextColor(ST77XX_BLACK, ST77XX_WHITE);
@@ -656,7 +699,39 @@ void MenuManager::render() {
             y += 30;
         }
         tft.setTextColor(ST77XX_WHITE);
-    } else if (currentMenu == OFFSET_MENU) {
+    }else if (currentMenu == RANDOM_DROP_PROB_MENU) {
+
+        tft.fillScreen(ST77XX_BLACK);
+        // Title at top
+        tft.setTextSize(2);
+        tft.setTextColor(ST77XX_WHITE);
+        tft.setCursor(10, 10);
+        tft.print("ptchbend ~prob");
+
+        // '...' at top, always highlighted
+        tft.setTextSize(2);
+        tft.setCursor(10, 40);
+        tft.setTextColor(ST77XX_BLACK, ST77XX_WHITE);
+        tft.print("...");
+
+        // Number in middle, always cyan
+        tft.setTextSize(2);
+        tft.setCursor(40, 80);
+        tft.setTextColor(ST77XX_MAGENTA, ST77XX_BLACK);
+        if (pitchbendProbInputBuffer.length() > 0) {
+            tft.print(pitchbendProbInputBuffer);
+        } else {
+            tft.print("0");
+        }
+
+        // Instructions at bottom
+        tft.setTextSize(1);
+        tft.setTextColor(ST77XX_YELLOW);
+        tft.setCursor(10, 120);
+        tft.print("press # when done, press * to restart");
+
+    }
+     else if (currentMenu == OFFSET_MENU) {
         tft.fillScreen(ST77XX_BLACK);
         tft.setTextSize(2);
         tft.setTextColor(ST77XX_WHITE);
