@@ -94,6 +94,8 @@ public:
     void saveSynthRetrigger(int eepromAddr);
     void saveRandomDropProb(int eepromAddr);
     void saveDelayNoteProb(int eepromAddr);
+    // Flag to request restoreDefaults from main loop
+    bool readyToRestoreDefaults = false;
 public:
     Adafruit_ST7789& tft;
     // Main menu selection

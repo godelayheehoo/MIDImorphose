@@ -89,6 +89,11 @@ channel to off and updating.  There's nuance here though-- the stuttered notes w
 //arp it.  Which.... gets rough.  Maybe try this out as its own tool on a mega first. 
 
 //add pitch bend prob now that we control it beter. Logarithmic?
+
+//per brett, I should only octave shift if I'm not doing an extension add.  But I dunno. I do want it to sound
+//a little "wrong" some times, so it'll be glitchy.
+
+//note delay by pulse Number instead? gets tricky, because off notes still need to be tied to time probably?  I guess could do them to the nearest pulse as well, shouldn't be that different. 
 #include "NoteStructs.h"
 #include "SortedBuffer.h"
 #include "MidiUtils.h"
@@ -379,8 +384,9 @@ const byte RETRIGGER_BUFFER_SIZE = 64;
 const byte RETRIGGER_TIME = 100; //todo: make this different for drums and synths? 50 is fine for drums, too fast for synths.
 const byte RETRIGGER_NOTE_LENGTH = 50; //doesn't matter for drums, might for samples, does for synth
 
-const byte PITCHBEND_PROB_PER_PULSE_10000 = 3; //note: this is x/10000, calculated once per clock pulse. 
-// at 1/10000, after four full notes the chance of at least one bend occurring is ~0.04.  At 10/10000, it's ~0.32.
+const byte PITCHBEND_PROB_PER_PULSE_10000 = 3; //note: this is x/100000, calculated once per clock pulse. 
+// at 1/100000, after four full notes the chance of at least one bend occurring is ~0.04.  At 10/100000, it's ~0.32.
+//these numbers were written for 1/10000
 
 const byte NUM_ACTIVE_PITCHBENDS = 4;
 const bool PITCHBEND_ACTIVE = true;
@@ -600,6 +606,9 @@ int numSynthNoteOnsInStutterBuffer;
 bool maybeDropNote = true;
 bool haveSeenClock = false;
 
+uint16_t drumState = 0;
+uint16_t synthState = 0;
+
 //midi channels
 // Map MIDI channels 1–16 to pins
 const uint8_t midiPins[16] = {
@@ -782,7 +791,7 @@ MidiEvent createOffNote(MidiEvent note, long timeOff = millis()){
 }
 
 bool randomProbResult(byte success_rate, long upper_bound = 100){
-  byte random_num = random(0,upper_bound);
+  long random_num = random(0,upper_bound);
   return random_num<success_rate;
 }
 
@@ -800,6 +809,47 @@ void handleClock() {
     haveSeenClock = true;
 }
 
+void restoreDefaults() {
+  // Drum defaults: false, false, false, false, false, false, false, false, false, true, true, false, false, false, false, false
+    bool drumDefaults[16] = {false, false, false, false, false, false, false, false, false, true, true, false, false, false, false, false};
+    bool synthDefaults[16] = {true, true, true, true, true, true, true, true, true, false, false, true, true, false, false, false};
+    drumState = 0;
+    synthState = 0;
+    for (int i = 0; i < 16; i++) {
+      drumMIDIenabled[i] = drumDefaults[i];
+      synthMIDIenabled[i] = synthDefaults[i];
+      if (drumDefaults[i]) drumState |= (1 << i);
+      if (synthDefaults[i]) synthState |= (1 << i);
+    }
+    // Set menu defaults
+  menu.stutterLengthActiveIdx = 9; // 1/4 note
+  menu.offsetActiveIdx = 1; // Any Offset
+  menu.menu1ActiveIdx = 1;
+  menu.menuBActiveIdx = 1;
+  menu.noteJitterProb = 0;
+  menu.drumJitterProb = 0;
+  menu.retriggerProb = 10;
+  menu.stutterTemperature = 0;
+  menu.retriggerSynths = false;
+  menu.randomDropProb = 0;
+  menu.delayNoteProb = 0;
+    // Immediately save defaults to EEPROM so future boots load correct values
+    EEPROM.write(EEPROM_ADDR_MAGIC, EEPROM_MAGIC);
+    EEPROM.put(EEPROM_ADDR_DRUM_STATE, drumState);
+    EEPROM.put(EEPROM_ADDR_SYNTH_STATE, synthState);
+  menu.saveStutterLength(EEPROM_ADDR_STUTTER_LENGTH);
+  menu.saveOffset(EEPROM_ADDR_OFFSET);
+  menu.saveMenu1(EEPROM_ADDR_MENU1);
+  menu.saveMenuB(EEPROM_ADDR_MENUB);
+  menu.saveNoteJitterProb(EEPROM_ADDR_JITTER_PROB);
+  menu.saveDrumJitterProb(EEPROM_ADDR_DRUM_JITTER_PROB);
+  menu.saveRetriggerProb(EEPROM_ADDR_RETRIGGER_PROB);
+  menu.saveStutterTemperature(EEPROM_ADDR_STUTTER_TEMPERATURE);
+  menu.saveSynthRetrigger(EEPROM_ADDR_SYNTH_RETRIGGER);
+  menu.saveRandomDropProb(EEPROM_ADDR_RANDOM_DROP_PROB);
+  menu.saveDelayNoteProb(EEPROM_ADDR_DELAY_NOTE_PROB);
+
+}
 
 //function prototypes
 void playSavedPulses();
@@ -965,8 +1015,7 @@ void setup() {
   //load EEPROM states and menu settings
   Serial.println("Loading EEPROM states");
   uint8_t magic = EEPROM.read(EEPROM_ADDR_MAGIC);
-  uint16_t drumState = 0;
-  uint16_t synthState = 0;
+ 
   if (magic == EEPROM_MAGIC) {
   EEPROM.get(EEPROM_ADDR_DRUM_STATE, drumState);
   EEPROM.get(EEPROM_ADDR_SYNTH_STATE, synthState);
@@ -990,45 +1039,7 @@ void setup() {
   Serial.println("EEPROM states and menu settings loaded");
   } else {
     Serial.println("EEPROM magic byte not found, using defaults");
-    // Drum defaults: false, false, false, false, false, false, false, false, false, true, true, false, false, false, false, false
-    bool drumDefaults[16] = {false, false, false, false, false, false, false, false, false, true, true, false, false, false, false, false};
-    bool synthDefaults[16] = {true, true, true, true, true, true, true, true, true, false, false, true, true, false, false, false};
-    drumState = 0;
-    synthState = 0;
-    for (int i = 0; i < 16; i++) {
-      drumMIDIenabled[i] = drumDefaults[i];
-      synthMIDIenabled[i] = synthDefaults[i];
-      if (drumDefaults[i]) drumState |= (1 << i);
-      if (synthDefaults[i]) synthState |= (1 << i);
-    }
-    // Set menu defaults
-  menu.stutterLengthActiveIdx = 9; // 1/4 note
-  menu.offsetActiveIdx = 1; // Any Offset
-  menu.menu1ActiveIdx = 1;
-  menu.menuBActiveIdx = 1;
-  menu.noteJitterProb = 0;
-  menu.drumJitterProb = 0;
-  menu.retriggerProb = 10;
-  menu.stutterTemperature = 0;
-  menu.retriggerSynths = false;
-  menu.randomDropProb = 0;
-  menu.delayNoteProb = 0;
-    // Immediately save defaults to EEPROM so future boots load correct values
-    EEPROM.write(EEPROM_ADDR_MAGIC, EEPROM_MAGIC);
-    EEPROM.put(EEPROM_ADDR_DRUM_STATE, drumState);
-    EEPROM.put(EEPROM_ADDR_SYNTH_STATE, synthState);
-  menu.saveStutterLength(EEPROM_ADDR_STUTTER_LENGTH);
-  menu.saveOffset(EEPROM_ADDR_OFFSET);
-  menu.saveMenu1(EEPROM_ADDR_MENU1);
-  menu.saveMenuB(EEPROM_ADDR_MENUB);
-  menu.saveNoteJitterProb(EEPROM_ADDR_JITTER_PROB);
-  menu.saveDrumJitterProb(EEPROM_ADDR_DRUM_JITTER_PROB);
-  menu.saveRetriggerProb(EEPROM_ADDR_RETRIGGER_PROB);
-  menu.saveStutterTemperature(EEPROM_ADDR_STUTTER_TEMPERATURE);
-  menu.saveSynthRetrigger(EEPROM_ADDR_SYNTH_RETRIGGER);
-  menu.saveRandomDropProb(EEPROM_ADDR_RANDOM_DROP_PROB);
-  menu.saveDelayNoteProb(EEPROM_ADDR_DELAY_NOTE_PROB);
-
+    restoreDefaults();
     //create drum machines on startup. TODO: functionality to relearn drum machines when we update
     //drumMachineMIDIEnabled
 
@@ -1289,6 +1300,12 @@ void loop() {
 
   //play any delayed notes that are due (really, first one only)
   playDelayedNotes();
+
+  // Check if restore defaults was requested from menu (after menu handling)
+  if (menu.readyToRestoreDefaults) {
+    restoreDefaults();
+    menu.readyToRestoreDefaults = false;
+  }
   
   //start new only-if-no-midi logic
 
@@ -1405,8 +1422,8 @@ void loop() {
     // Drum defaults: false, false, false, false, false, false, false, false, false, true, true, false, false, false, false, false
     bool drumDefaults[16] = {false, false, false, false, false, false, false, false, false, true, true, false, false, false, false, false};
     bool synthDefaults[16] = {true, true, true, true, true, true, true, true, true, false, false, true, true, false, false, false};
-    uint16_t drumState = 0;
-    uint16_t synthState = 0;
+    drumState = 0;
+    synthState = 0;
     for (int i = 0; i < 16; i++) {
       drumMIDIenabled[i] = drumDefaults[i];
       synthMIDIenabled[i] = synthDefaults[i];

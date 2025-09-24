@@ -171,7 +171,7 @@ void MenuManager::handleInput(MenuButton btn) {
     }
     switch (currentMenu) {
         case MAIN_MENU: {
-            // Now 12 items: Menu 1, Menu 2, Note Jitter Prob, Drum Jitter Prob, Retrigger Prob, Random Drop Prob, Delay Note Probability, Stutter Temperature, Channel Config, Stutter Length, Offset/Scale, Retrigger Synth
+            // Now 13 items: Menu 1, Menu 2, Note Jitter Prob, Drum Jitter Prob, Retrigger Prob, Random Drop Prob, Delay Note Probability, Stutter Temperature, Channel Config, Stutter Length, Offset/Scale, Retrigger Synth, Restore Defaults
             if (btn == BUTTON_UP) {
                 if (mainMenuSelectedIdx > 0) {
                     mainMenuSelectedIdx--;
@@ -180,7 +180,7 @@ void MenuManager::handleInput(MenuButton btn) {
                     }
                 }
             } else if (btn == BUTTON_DOWN) {
-                if (mainMenuSelectedIdx < 11) {
+                if (mainMenuSelectedIdx < 12) {
                     mainMenuSelectedIdx++;
                     if (mainMenuSelectedIdx > mainMenuScrollIdx + MAIN_MENU_VISIBLE_ITEMS - 1) {
                         mainMenuScrollIdx = mainMenuSelectedIdx - MAIN_MENU_VISIBLE_ITEMS + 1;
@@ -227,6 +227,9 @@ void MenuManager::handleInput(MenuButton btn) {
                 } else if (mainMenuSelectedIdx == 11) {
                     currentMenu = RETRIGGER_SYNTH_MENU;
                     retriggerSynthSelectedIdx = 0;
+                } else if (mainMenuSelectedIdx == 12) {
+                    // Restore Defaults selected
+                    readyToRestoreDefaults = true;
                 }
             }
             break;
@@ -475,8 +478,8 @@ void MenuManager::handleDelayNoteProbKeypad(char key) {
 void MenuManager::render() {
     if (currentMenu == MAIN_MENU) {
         // Main menu: list of menus
-        // Add Delay Note Prob after Random Drop Prob
-        const char* menus[12] = {"Menu 1", "Menu 2", "Note Jitter Prob", "Drum Jitter Prob", "Retrigger Prob", "Random Drop Prob", "Delay Note Prob", "StutterTemperature", "Channel Config", "Stutter Length", "Offset/Scale", "Retrigger Synth"};
+        // Add Delay Note Prob after Random Drop Prob, and Restore Defaults at the end
+        const char* menus[13] = {"Menu 1", "Menu 2", "Note Jitter Prob", "Drum Jitter Prob", "Retrigger Prob", "Random Drop Prob", "Delay Note Prob", "StutterTemperature", "Channel Config", "Stutter Length", "Offset/Scale", "Retrigger Synth", "Restore Defaults"};
         int yStart = 10;
         tft.setTextSize(2);
         tft.setCursor(10, yStart);
@@ -486,7 +489,7 @@ void MenuManager::render() {
         // Main menu labels
         int itemIdx = mainMenuScrollIdx;
         int y = yStart;
-        for (int visible = 0; visible < MAIN_MENU_VISIBLE_ITEMS && itemIdx < 12; ++visible, ++itemIdx) {
+        for (int visible = 0; visible < MAIN_MENU_VISIBLE_ITEMS && itemIdx < 13; ++visible, ++itemIdx) {
             tft.setCursor(20, y + 30);
             if (mainMenuSelectedIdx == itemIdx) {
                 tft.setTextColor(ST77XX_BLACK, ST77XX_WHITE);
