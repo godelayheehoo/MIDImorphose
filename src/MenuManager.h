@@ -17,7 +17,8 @@ enum MenuState {
     OFFSET_MENU,
     STUTTER_TEMPERATURE_MENU,
     RETRIGGER_SYNTH_MENU,
-    PITCHBEND_PROB_MENU
+    PITCHBEND_PROB_MENU,
+    DELAY_TIMES_MENU
 };
 // Offset sets and labels
 struct OffsetSet {
@@ -97,6 +98,8 @@ public:
     void saveRandomDropProb(int eepromAddr);
     void saveDelayNoteProb(int eepromAddr);
     void savePitchbendProb(int eepromAddr);
+    void saveMinDelayTime(int eepromAddr);
+    void saveMaxDelayTime(int eepromAddr);
     // Flag to request restoreDefaults from main loop
     bool readyToRestoreDefaults = false;
 public:
@@ -155,4 +158,8 @@ public:
     int offsetActiveIdx = 1; // Active option, initially Option 1 (index 1)
     // Pointer to current offset set
     OffsetSet* currentOffsetSet; // Will be initialized in constructor
+
+    unsigned int minDelayTime = 500;
+    unsigned int maxDelayTime = 4000;
+    byte delayTimeSelectedIdx = 0; // 0 = '...', 1 = left, 2 = right
 };

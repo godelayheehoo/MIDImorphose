@@ -1,6 +1,6 @@
 #pragma once
 //EEPROM magic number to indicate valid stored settings
-#define EEPROM_MAGIC 0x09
+#define EEPROM_MAGIC 0x10
 
 // EEPROM address constants for all menu settings and states
 #define EEPROM_ADDR_MAGIC          0
@@ -20,5 +20,7 @@
 #define EEPROM_ADDR_PITCHBEND_PROB 44
 //NOTE: PITCHBEND PROB IS AN (unsigned) INT! NOT A BYTE! Ints on teensy take 4 bytes, on megas they take 2.
 // so the next address should be 48.  We'll just lose the space if it's on a mega I guess.  Can change that later 
-//presumably. 
-
+//presumably.  You muse use EEPROM.get and EEPROM.put to read and write ints.
+#define EEPROM_ADDR_MIN_DELAY_TIME 48 
+#define EEPROM_ADDR_MAX_DELAY_TIME 52
+// New address for delay times (4 bytes each for min and max), so next address is 56

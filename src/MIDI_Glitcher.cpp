@@ -393,8 +393,7 @@ const byte RETRIGGER_NOTE_LENGTH = 50; //doesn't matter for drums, might for sam
 const byte NUM_ACTIVE_PITCHBENDS = 4;
 // const bool PITCHBEND_ACTIVE = true;
 
-const int MIN_DELAY_TIME = 500; //ms
-const int MAX_DELAY_TIME = 4000; //ms
+
 const byte MAX_DELAYED_NOTES = 128;
 
 
@@ -836,6 +835,8 @@ void restoreDefaults() {
   menu.randomDropProb = 0;
   menu.delayNoteProb = 0;
   menu.pitchbendProb = 0;
+  menu.minDelayTime = 500;
+  menu.maxDelayTime = 4000;
     // Immediately save defaults to EEPROM so future boots load correct values
     EEPROM.write(EEPROM_ADDR_MAGIC, EEPROM_MAGIC);
     EEPROM.put(EEPROM_ADDR_DRUM_STATE, drumState);
@@ -852,6 +853,8 @@ void restoreDefaults() {
   menu.saveRandomDropProb(EEPROM_ADDR_RANDOM_DROP_PROB);
   menu.saveDelayNoteProb(EEPROM_ADDR_DELAY_NOTE_PROB);
   menu.savePitchbendProb(EEPROM_ADDR_PITCHBEND_PROB);
+  menu.saveMinDelayTime(EEPROM_ADDR_MIN_DELAY_TIME);
+  menu.saveMaxDelayTime(EEPROM_ADDR_MAX_DELAY_TIME);
 
 }
 
@@ -1035,7 +1038,9 @@ void setup() {
   menu.retriggerSynths = EEPROM.read(EEPROM_ADDR_SYNTH_RETRIGGER);
   menu.randomDropProb = EEPROM.read(EEPROM_ADDR_RANDOM_DROP_PROB);
   menu.delayNoteProb = EEPROM.read(EEPROM_ADDR_DELAY_NOTE_PROB);
-  menu.pitchbendProb = EEPROM.read(EEPROM_ADDR_PITCHBEND_PROB);
+  EEPROM.get(EEPROM_ADDR_PITCHBEND_PROB, menu.pitchbendProb);
+  EEPROM.get(EEPROM_ADDR_MIN_DELAY_TIME, menu.minDelayTime);
+  EEPROM.get(EEPROM_ADDR_MAX_DELAY_TIME, menu.maxDelayTime);
 
   Serial.print("Loaded noteJitterProb from EEPROM: ");
   Serial.println(menu.noteJitterProb);
@@ -1173,7 +1178,7 @@ void loop() {
           if(randomProbResult(menu.delayNoteProb)){
             //if it's a note on, we delay it and make note of that
             if(type==midi::NoteOn){
-              unsigned long delay = random(MIN_DELAY_TIME, MAX_DELAY_TIME);
+              unsigned long delay = random(menu.minDelayTime, menu.maxDelayTime);
               newEvent.playTime+=delay;
               delayedNotesBuffer.push(newEvent);
               DelayedNoteOn dno = DelayedNoteOn(newEvent.note, newEvent.playTime, delay);

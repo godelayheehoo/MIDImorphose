@@ -67,12 +67,24 @@ void MenuManager::saveDelayNoteProb(int eepromAddr) {
 
 void MenuManager::savePitchbendProb(int eepromAddr) {
     EEPROM.write(EEPROM_ADDR_MAGIC, EEPROM_MAGIC);
-    EEPROM.write(eepromAddr, pitchbendProb);
+    EEPROM.put(eepromAddr, pitchbendProb);
     Serial.print("savePitchbendProb called, value: ");
     Serial.println(pitchbendProb);
 }
 
+void MenuManager::saveMinDelayTime(int eepromAddr){
+    EEPROM.write(EEPROM_ADDR_MAGIC, EEPROM_MAGIC);
+    EEPROM.put(eepromAddr, minDelayTime);
+    Serial.print("saveMinDelayTime called, value: ");
+    Serial.println(minDelayTime);
+}
 
+void MenuManager::saveMaxDelayTime(int eepromAddr){
+    EEPROM.write(EEPROM_ADDR_MAGIC, EEPROM_MAGIC);
+    EEPROM.put(eepromAddr, maxDelayTime);
+    Serial.print("saveMaxDelayTime called, value: ");
+    Serial.println(maxDelayTime);
+}
 
 MenuManager::MenuManager(Adafruit_ST7789& display) : tft(display), currentMenu(MAIN_MENU) {
     currentOffsetSet = &OFFSET_SETS[0]; // Default to No Offset
@@ -186,7 +198,7 @@ void MenuManager::handleInput(MenuButton btn) {
     }
     switch (currentMenu) {
         case MAIN_MENU: {
-            // Now 14 items: add ptchbnd ~prob before Restore Defaults
+            // Now 15 items: add ptchbnd ~prob before Restore Defaults
             if (btn == BUTTON_UP) {
                 if (mainMenuSelectedIdx > 0) {
                     mainMenuSelectedIdx--;
@@ -195,7 +207,7 @@ void MenuManager::handleInput(MenuButton btn) {
                     }
                 }
             } else if (btn == BUTTON_DOWN) {
-                if (mainMenuSelectedIdx < 13) {
+                if (mainMenuSelectedIdx < 14) {
                     mainMenuSelectedIdx++;
                     if (mainMenuSelectedIdx > mainMenuScrollIdx + MAIN_MENU_VISIBLE_ITEMS - 1) {
                         mainMenuScrollIdx = mainMenuSelectedIdx - MAIN_MENU_VISIBLE_ITEMS + 1;
@@ -245,10 +257,14 @@ void MenuManager::handleInput(MenuButton btn) {
                 } else if (mainMenuSelectedIdx == 12) {
                     currentMenu = PITCHBEND_PROB_MENU;
                     pitchbendProbInputBuffer = String(pitchbendProb);
-                } else if (mainMenuSelectedIdx == 13) {
+                }  else if (mainMenuSelectedIdx == 13) {
+                    currentMenu = DELAY_TIMES_MENU;
+                    delayTimeSelectedIdx = 0;
+                }else if (mainMenuSelectedIdx == 14) {
                     // Restore Defaults selected
                     readyToRestoreDefaults = true;
                 }
+                
             }
             break;
         case OFFSET_MENU: {
@@ -307,6 +323,48 @@ void MenuManager::handleInput(MenuButton btn) {
             }
             break;
         }
+        case DELAY_TIMES_MENU:
+            if (btn==BUTTON_SELECT){
+                if (delayTimeSelectedIdx==0){
+                    // '...' selected, save and return to main menu
+                    saveMinDelayTime(EEPROM_ADDR_MIN_DELAY_TIME);
+                    saveMaxDelayTime(EEPROM_ADDR_MAX_DELAY_TIME);
+                    currentMenu=MAIN_MENU;
+
+                } else if (delayTimeSelectedIdx==1){
+                    // Min Delay Time selected
+                } else if (delayTimeSelectedIdx==2){
+                    // Max Delay Time selected
+                }
+            }
+            else if (btn==BUTTON_DOWN){
+                if (delayTimeSelectedIdx<2) delayTimeSelectedIdx++;
+            }
+            else if (btn==BUTTON_UP){
+                if (delayTimeSelectedIdx>0) delayTimeSelectedIdx--;
+            }
+            else if (btn==BUTTON_RIGHT){
+                // Increment value
+                if (delayTimeSelectedIdx==1){
+                    minDelayTime+=100;
+                    if (minDelayTime>maxDelayTime) minDelayTime=maxDelayTime;
+                } else if (delayTimeSelectedIdx==2){
+                    maxDelayTime+=100;
+                    if (maxDelayTime>60000) maxDelayTime=60000; // Cap at 60 seconds
+                }
+            }
+            else if (btn==BUTTON_LEFT){
+                // Decrement value
+                if (delayTimeSelectedIdx==1){
+                    if (minDelayTime>=20) minDelayTime-=100;
+                    else minDelayTime=0;
+                } else if (delayTimeSelectedIdx==2){
+                    if (maxDelayTime>=200) maxDelayTime-=100;
+                    else maxDelayTime=0;
+                }
+            }
+            break;
+
         case MENU_1:
             if (btn == BUTTON_SELECT) {
                 if (menu1SelectedIdx == 0) {
@@ -518,7 +576,7 @@ void MenuManager::render() {
     if (currentMenu == MAIN_MENU) {
         // Main menu: list of menus
         // Add ptchbnd ~prob before Restore Defaults
-        const char* menus[14] = {"Menu 1", "Menu 2", "Note Jitter Prob", "Drum Jitter Prob", "Retrigger Prob", "Random Drop Prob", "Delay Note Prob", "StutterTemperature", "Channel Config", "Stutter Length", "Offset/Scale", "Retrigger Synth", "ptchbnd ~prob", "Restore Defaults"};
+        const char* menus[15] = {"Menu 1", "Menu 2", "Note Jitter Prob", "Drum Jitter Prob", "Retrigger Prob", "Random Drop Prob", "Delay Note Prob", "StutterTemperature", "Channel Config", "Stutter Length", "Offset/Scale", "Retrigger Synth", "ptchbnd ~prob","delay times", "Restore Defaults"};
         int yStart = 10;
         tft.setTextSize(2);
         tft.setCursor(10, yStart);
@@ -528,7 +586,7 @@ void MenuManager::render() {
         // Main menu labels
         int itemIdx = mainMenuScrollIdx;
         int y = yStart;
-        for (int visible = 0; visible < MAIN_MENU_VISIBLE_ITEMS && itemIdx < 14; ++visible, ++itemIdx) {
+        for (int visible = 0; visible < MAIN_MENU_VISIBLE_ITEMS && itemIdx < 15; ++visible, ++itemIdx) {
             tft.setCursor(20, y + 30);
             if (mainMenuSelectedIdx == itemIdx) {
                 tft.setTextColor(ST77XX_BLACK, ST77XX_WHITE);
@@ -1003,5 +1061,63 @@ void MenuManager::render() {
         tft.setTextColor(ST77XX_YELLOW);
         tft.setCursor(10, 120);
         tft.print("press # when done, press * to restart");
+    }
+
+    else if (currentMenu == DELAY_TIMES_MENU){
+    tft.fillScreen(ST77XX_BLACK);
+    tft.setTextSize(2);
+    tft.setTextColor(ST77XX_WHITE);
+    tft.setCursor(10, 10);
+    tft.print("delay times");
+
+    // '...' at top
+    tft.setCursor(10, 40);
+    if(delayTimeSelectedIdx==0){tft.setTextColor(ST77XX_BLACK, ST77XX_WHITE);}
+    else{tft.setTextColor(ST77XX_WHITE, ST77XX_BLACK);}
+    tft.print("...");
+
+    // Slider bar
+    int barX = 30, barY = 70, barW = 180, barH = 8;
+    tft.fillRect(barX, barY, barW, barH, ST77XX_WHITE);
+
+    // Map delay times (0-60000 ms) to bar pixel positions
+    int minDelay = 0;
+    int maxDelay = 60000;
+    int minPos = barX + ((minDelayTime - minDelay) * barW) / (maxDelay - minDelay);
+    int maxPos = barX + ((maxDelayTime - minDelay) * barW) / (maxDelay - minDelay);
+
+
+    if(delayTimeSelectedIdx==2){
+    // Draw min marker
+    tft.fillCircle(minPos, barY + barH / 2, 8,  delayTimeSelectedIdx== 1 ? ST77XX_MAGENTA : ST77XX_CYAN);
+    tft.setCursor(minPos - 10, barY + 18);
+
+    // Draw max marker
+    tft.fillCircle(maxPos, barY + barH / 2, 9, delayTimeSelectedIdx == 2 ? ST77XX_MAGENTA : ST77XX_CYAN);
+    tft.setCursor(maxPos - 10, barY + 18);
+    tft.setTextColor(ST77XX_MAGENTA);
+    tft.print(maxDelayTime);
+}
+else{
+    // Draw max marker
+    tft.fillCircle(maxPos, barY + barH / 2, 9, delayTimeSelectedIdx == 2 ? ST77XX_MAGENTA : ST77XX_CYAN);
+    tft.setCursor(maxPos - 10, barY + 18);
+
+    
+    // Draw min marker
+    tft.fillCircle(minPos, barY + barH / 2, 8,  delayTimeSelectedIdx== 1 ? ST77XX_MAGENTA : ST77XX_CYAN);
+    tft.setTextSize(2);
+    tft.setTextColor(ST77XX_MAGENTA);
+    tft.setCursor(minPos - 10, barY + 18);
+    tft.print(minDelayTime);
+}
+
+    // Optionally, draw a line between min and max
+    tft.drawLine(minPos, barY + barH / 2, maxPos, barY + barH / 2, ST77XX_YELLOW);
+
+    tft.setTextSize(1);
+    tft.setTextColor(ST77XX_YELLOW);
+    tft.setCursor(10, 120);
+    tft.print("you must exit to save");
     }
 }
