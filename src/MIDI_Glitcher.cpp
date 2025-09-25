@@ -88,14 +88,14 @@ channel to off and updating.  There's nuance here though-- the stuttered notes w
 //which is awkward from a UI perspective.  Basically you have to track **all* on notes, and when >2 notes is received in a channel,
 //arp it.  Which.... gets rough.  Maybe try this out as its own tool on a mega first. 
 
-//add pitch bend prob now that we control it beter. Logarithmic?
+//add pitch bend prob now that we control it better. Logarithmic?
 
 //per brett, I should only octave shift if I'm not doing an extension add.  But I dunno. I do want it to sound
 //a little "wrong" some times, so it'll be glitchy.
 
 //note delay by pulse Number instead? gets tricky, because off notes still need to be tied to time probably?  I guess could do them to the nearest pulse as well, shouldn't be that different. 
 
-//rework pitchbend menu to explain what ~prob is.
+//restoreDefaults() should call the reset drum defaults function, so that I only have to update one thing in the code.
 #include "NoteStructs.h"
 #include "SortedBuffer.h"
 #include "MidiUtils.h"
@@ -813,7 +813,7 @@ void handleClock() {
 
 void restoreDefaults() {
   // Drum defaults: false, false, false, false, false, false, false, false, false, true, true, false, false, false, false, false
-    bool drumDefaults[16] = {false, false, false, false, false, false, false, false, false, true, true, false, false, false, false, false};
+    bool drumDefaults[16] = {false, false, false, false, false, false, false, false, true, true, true, false, false, false, false, false};
     bool synthDefaults[16] = {true, true, true, true, true, true, true, true, true, false, false, true, true, false, false, false};
     drumState = 0;
     synthState = 0;
@@ -1430,8 +1430,8 @@ void loop() {
   if(menu.pendingChannelDefaultsReset) {
     Serial.println(F("Resetting channel config to defaults!"));
     // Drum defaults: false, false, false, false, false, false, false, false, false, true, true, false, false, false, false, false
-    bool drumDefaults[16] = {false, false, false, false, false, false, false, false, false, true, true, false, false, false, false, false};
-    bool synthDefaults[16] = {true, true, true, true, true, true, true, true, true, false, false, true, true, false, false, false};
+    bool drumDefaults[16] = {false, false, false, false, false, false, false, false, true, true, true, false, false, false, false, false};
+    bool synthDefaults[16] = {true, true, true, true, true, true, true, true, true, false, false, true, true, true, true, true};
     drumState = 0;
     synthState = 0;
     for (int i = 0; i < 16; i++) {
@@ -1697,7 +1697,7 @@ if(logButton.update()){
   prevLooping = isLooping;
   oldPulseResolution = menu.pulseResolution;
 
-  if(menu.pitchbendProb>0){
+  if((menu.pitchbendProb>0)||(pitchbendBuffer.size()>0)){
   pruneBends();
   }
   

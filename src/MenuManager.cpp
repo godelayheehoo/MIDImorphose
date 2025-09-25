@@ -64,10 +64,6 @@ void MenuManager::saveDelayNoteProb(int eepromAddr) {
     Serial.println(delayNoteProb);
 }
 
-void MenuManager::saveRandomDropProb(int eepromAddr) {
-    EEPROM.write(EEPROM_ADDR_MAGIC, EEPROM_MAGIC);
-    EEPROM.write(eepromAddr, randomDropProb);
-}
 
 void MenuManager::savePitchbendProb(int eepromAddr) {
     EEPROM.write(EEPROM_ADDR_MAGIC, EEPROM_MAGIC);
@@ -498,7 +494,7 @@ void MenuManager::handleDelayNoteProbKeypad(char key) {
 }
 
 void MenuManager::handlePitchbendProbKeypad(char key) {
-    if (currentMenu != DELAY_NOTE_PROB_MENU) return;
+    if (currentMenu != PITCHBEND_PROB_MENU) return;
     static bool inputLocked = false;
     if (key == '*') {
         pitchbendProbInputBuffer= "";
@@ -699,7 +695,7 @@ void MenuManager::render() {
             y += 30;
         }
         tft.setTextColor(ST77XX_WHITE);
-    }else if (currentMenu == RANDOM_DROP_PROB_MENU) {
+    }else if (currentMenu == PITCHBEND_PROB_MENU) {
 
         tft.fillScreen(ST77XX_BLACK);
         // Title at top
@@ -727,8 +723,10 @@ void MenuManager::render() {
         // Instructions at bottom
         tft.setTextSize(1);
         tft.setTextColor(ST77XX_YELLOW);
-        tft.setCursor(10, 120);
+        tft.setCursor(10, 112);
         tft.print("press # when done, press * to restart");
+        tft.setCursor(10, 120);
+        tft.print("out of 100k");
 
     }
      else if (currentMenu == OFFSET_MENU) {
