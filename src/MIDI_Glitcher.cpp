@@ -79,11 +79,6 @@ channel to off and updating.  There's nuance here though-- the stuttered notes w
 //todo: I could sometimes, randomly, instead of playing an active note, swap it out with one from the stutter buffer.
 //might add too much time overhead.
 
-//todo: could also randomly just play notes from the stutter buffer sometimes.
-
-//todo: min/max delay times and probability in menu
-//todo: drop probability in menu.
-
 //todo: random arping? probably have to limit this to be during stutter only and/or limited to one synth at a time,
 //which is awkward from a UI perspective.  Basically you have to track **all* on notes, and when >2 notes is received in a channel,
 //arp it.  Which.... gets rough.  Maybe try this out as its own tool on a mega first. 
@@ -96,6 +91,12 @@ channel to off and updating.  There's nuance here though-- the stuttered notes w
 //note delay by pulse Number instead? gets tricky, because off notes still need to be tied to time probably?  I guess could do them to the nearest pulse as well, shouldn't be that different. 
 
 //restoreDefaults() should call the reset drum defaults function, so that I only have to update one thing in the code.
+
+
+//todo: could also randomly just play notes from the stutter buffer sometimes.  Call this... blooping? I dunno
+
+//I do really like the idea of forcing velocity patterns.  But there's a lot of decisions that need to be made. Like, for instance,
+//if it's per-instrument and if so if we have control over it.  
 #include "NoteStructs.h"
 #include "SortedBuffer.h"
 #include "MidiUtils.h"
