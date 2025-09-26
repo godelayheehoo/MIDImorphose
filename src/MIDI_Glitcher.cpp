@@ -595,7 +595,14 @@ bool loopInitialized = false;
 unsigned long playbackStartTime;
 unsigned long playbackEndTime;
 unsigned long playbackLength;
+//this is related to pulse resolution
 int currentPulse = 0;
+
+//this is progress through a full bar, maybe off-beat, of 96 pulses from the start.
+byte currentPulseInBar = 0;
+
+
+
 
 //misc constants & states
 const byte MIDI_NOOP = 0x00;
@@ -650,6 +657,31 @@ bool synthMIDIenabled[16]=  {
   true, true, false, false
 };
 
+//one per pulse
+byte velocityCoerceValues[6][16] = {
+ // Jagged Accent Stabs – high punchy hits with soft ghost notes in between
+ {127, 20, 85, 18, 124, 15, 90, 22, 126, 19, 83, 17, 125, 16, 88, 21},
+
+ // Rolling Push–Pull – mid-range tension alternating with strong accents
+ {118, 15, 92, 28, 121, 20, 87, 25, 124, 18, 84, 22, 119, 17, 91, 24},
+
+ // Ghost-Laden Groove – extremely soft notes punctuated by isolated accents
+ {127, 15, 82, 18, 123, 17, 88, 16, 125, 20, 85, 15, 121, 18, 90, 16},
+
+ // Slow Swell and Crash – dynamic swells ending in hard accents
+ {115, 25, 86, 20, 122, 30, 84, 22, 127, 28, 92, 19, 120, 24, 89, 21},
+
+ // Offbeat Snap – sharp hits on offbeats with subtle soft notes
+ {123, 18, 87, 15, 119, 20, 91, 16, 127, 19, 84, 15, 121, 22, 90, 17},
+
+ // Chaotic Pulse – unpredictable mix of extreme highs and lows
+ {126, 15, 92, 28, 124, 16, 88, 25, 127, 20, 83, 18, 125, 17, 91, 22}
+};
+
+
+byte velocityCoercionIdx = 0;
+
+
 
 //note that active notes tracking for 256 has been solved by isolating the MIDI in, but it's still
 //useful to have.
@@ -668,6 +700,11 @@ const int retriggerSwitchPin = 40;
 const int jitterSwitchPin = 39;
 SwitchHelper retriggerSwitch;
 SwitchHelper jitterSwitch;
+
+//temp
+bool velocityCoercion = false;
+const int velocityCoercionSwitchPin = 22;
+SwitchHelper velocityCoercionSwitch;
 
 byte octaveShiftOption = 0; //todo: implement
 /*
@@ -950,6 +987,9 @@ void setup() {
 
   retriggerSwitch.setup(retriggerSwitchPin);
   jitterSwitch.setup(jitterSwitchPin);
+  
+  //temp 
+  velocityCoercionSwitch.setup(velocityCoercionSwitchPin);
 
   Serial.println("Turning on buffer LED pin");
   digitalWrite(bufferLedPin, HIGH);
@@ -1254,6 +1294,13 @@ void loop() {
               }
               
           }
+
+          //apply velocity coercion to both loop and unlooped note
+          if(velocityCoercion){
+            //divide by 6 to get which sixteenth note we're on.
+            newEvent.velocity = velocityCoerceValues[velocityCoercionIdx][currentPulseInBar/6];
+          }
+          
          
           
           //if we're not looping OR we're on an untracked channel-- the contents of this block, pass through the note 
@@ -1415,7 +1462,15 @@ void loop() {
   };
   jitterOn = jitterSwitch.isOn();
 
-
+if(velocityCoercionSwitch.update()){
+    Serial.println(F("Velocity Coercion switch changed!"));
+    if(velocityCoercionSwitch.isOn()){
+    velocityCoercionIdx= (velocityCoercionIdx+1)%6;
+    Serial.print("Coercion index is now");
+    Serial.println(velocityCoercionIdx);
+    }
+  };
+  velocityCoercion = velocityCoercionSwitch.isOn();
 
 
   stutterButtonPressed = readStutterButton();
@@ -1854,6 +1909,9 @@ void manglerHandleClock() {
   pulseStartTimes.push(pulseTime);
   tempoTracker.addPulse(pulseTime);
   tempoTracker.calculateBPM();
+
+  currentPulseInBar = (currentPulseInBar + 1) % 96;
+  
 }
 
 
