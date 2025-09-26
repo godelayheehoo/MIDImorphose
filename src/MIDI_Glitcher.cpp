@@ -658,7 +658,7 @@ bool synthMIDIenabled[16]=  {
 };
 
 //one per pulse
-byte velocityCoerceValues[6][16] = {
+byte velocityCoerceValues[7][16] = {
  // Jagged Accent Stabs – high punchy hits with soft ghost notes in between
  {127, 20, 85, 18, 124, 15, 90, 22, 126, 19, 83, 17, 125, 16, 88, 21},
 
@@ -675,7 +675,20 @@ byte velocityCoerceValues[6][16] = {
  {123, 18, 87, 15, 119, 20, 91, 16, 127, 19, 84, 15, 121, 22, 90, 17},
 
  // Chaotic Pulse – unpredictable mix of extreme highs and lows
- {126, 15, 92, 28, 124, 16, 88, 25, 127, 20, 83, 18, 125, 17, 91, 22}
+ {126, 15, 92, 28, 124, 16, 88, 25, 127, 20, 83, 18, 125, 17, 91, 22},
+
+ // Narcolepsy - most notes are very soft, sporadic high velocity hits
+ {127, 10, 100, 12, 5, 15, 95, 14, 8, 11, 120, 13, 124, 14, 3, 12}
+};
+
+const char* velocityCoerceLabels[7] = {
+  "Jagged Accent Stabs",
+  "Rolling Push-Pull",
+  "Ghost-Laden Groove",
+  "Slow Swell and Crash",
+  "Offbeat Snap",
+  "Chaotic Pulse",
+  "Narcolepsy"
 };
 
 
@@ -949,6 +962,8 @@ void refreshDrumMachines();
 
 DelayedNoteOn checkForDelayedOn(byte channelNumber, byte noteNumber);
 void playDelayedNotes();
+
+void showVelocityCoercionLabel();
 
 // --- State variables for pending updates ---
 bool pendingDrumChannelUpdate = false;
@@ -1297,6 +1312,7 @@ void loop() {
 
           //apply velocity coercion to both loop and unlooped note
           if(velocityCoercion){
+            
             //divide by 6 to get which sixteenth note we're on.
             newEvent.velocity = velocityCoerceValues[velocityCoercionIdx][currentPulseInBar/6];
           }
@@ -1324,10 +1340,12 @@ void loop() {
         
       }//end this-is-a-note logic 
       else if(type==midi::Stop){
+        currentPulseInBar = 0;
         midiPanic();
         MIDItx.sendRealTime(midi::Stop);
       }
       else if(type==midi::Start||type==midi::Continue){
+        currentPulseInBar = 0;
         MIDItx.sendRealTime((midi::MidiType)type);
       }
       else{
@@ -1465,9 +1483,15 @@ void loop() {
 if(velocityCoercionSwitch.update()){
     Serial.println(F("Velocity Coercion switch changed!"));
     if(velocityCoercionSwitch.isOn()){
-    velocityCoercionIdx= (velocityCoercionIdx+1)%6;
+    velocityCoercionIdx= (velocityCoercionIdx+1)%(sizeof(velocityCoerceValues)/sizeof(velocityCoerceValues[0]));
     Serial.print("Coercion index is now");
     Serial.println(velocityCoercionIdx);
+    // Start temporary view
+    tempViewCallback = showVelocityCoercionLabel;
+    tempViewStartTime = millis();
+    tempViewActive = true;
+
+    tempViewCallback(); 
     }
   };
   velocityCoercion = velocityCoercionSwitch.isOn();
@@ -2660,6 +2684,20 @@ void showPanicDisplay() {
     statusDisplay.display();
 }
 
+void showVelocityCoercionLabel(){
+  const char* velMsg = velocityCoerceLabels[velocityCoercionIdx];
+  statusDisplay.clearDisplay();
+  statusDisplay.setTextSize(2);
+  statusDisplay.setTextColor(SSD1306_WHITE);
+  int16_t x1, y1;
+  uint16_t w, h;
+  statusDisplay.getTextBounds(velMsg, 0, 0, &x1, &y1, &w, &h);
+  int x = (statusDisplay.width() - w) / 2;
+  int y = (statusDisplay.height() - h) / 2;
+  statusDisplay.setCursor(x, y);
+  statusDisplay.println(velMsg);
+  statusDisplay.display();
+}
 
 void drawStretchStatusDisplay() {
   char stretchVal[8];
