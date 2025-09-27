@@ -8,7 +8,7 @@ Updates todo:
 
 ## Overview
 
-MIDI Mangler V2 is a PlatformIO-based Arduino project for the ATmega2560 (Mega) board. It manipulates MIDI events in real time, providing features such as stuttering/looping, channel filtering, timing effects, note jitter, and retriggering. The project uses a visual menu system on a TFT display for configuration, with hardware controls for performance features. Channel assignments are set using dipswitches and confirmed via the menu. Channel settings are saved to EEPROM for persistence. The project uses the FortySevenEffects-derived teensy MIDI library for MIDI communication.
+MIDI Mangler V2 is a PlatformIO-based Arduino project for the Teensy 4.1 board. It manipulates MIDI events in real time, providing features such as stuttering/looping, channel filtering, timing effects, note jitter, and retriggering. The project uses a visual menu system on a TFT display for configuration, with hardware controls for performance features. Channel assignments are set using dipswitches and confirmed via the menu. Channel settings are saved to EEPROM for persistence. The project uses the FortySevenEffects-derived teensy MIDI library for MIDI communication.
 
 ## Features
 
@@ -20,7 +20,7 @@ MIDI Mangler V2 is a PlatformIO-based Arduino project for the ATmega2560 (Mega) 
 - **Drum Jitter:** Enable/disable jitter using the dedicated switch (same as for synth).  Jitter probability can be set via the TFT menu using keypad input (dedicatd probability).
 - **Retriggering:** Enable/disable retriggering using the dedicated switch. Retrigger probability can be set via the TFT menu using keypad input.
 - **Pitch Bend Glitching:** Random pitch bends can be triggered on synth channels.  Currently, the probability is hardcoded to be somewhat rare.  
-- **Buffer Management:** Large buffer for MIDI events (384 events on MEGA). LED indicates buffer full.
+- **Buffer Management:** Large buffer for MIDI events.
 - **MIDI Panic:** Dedicated button sends "All Notes Off" to all channels. OLED displays panic status and channel matrix.
 - **Display Support:**
   - **TFT (ST7789):** Visual menu system for configuration and navigation.
@@ -29,7 +29,7 @@ MIDI Mangler V2 is a PlatformIO-based Arduino project for the ATmega2560 (Mega) 
 
 ## Hardware Setup
 
-- **Board:** Arduino Mega (ATmega2560)
+- **Board:** Teensy 4.1
 - **MIDI:** Uses Serial 8 for MIDI input and Serial 5 for MIDI output.
 - **Buttons/Switches:**
   - Stutter switch (pin 2)
@@ -86,12 +86,60 @@ MIDI Mangler V2 is a PlatformIO-based Arduino project for the ATmega2560 (Mega) 
 
 ## Menu System
 
-The TFT display provides a visual menu system for configuration:
 
-- **Main Menu:** Navigate between configuration options (e.g., channel config, jitter probability, retrigger probability).
-- **Channel Config Menu:** Select “set drum channels” or “set synth channels” to confirm dipswitch assignments.
-- **Jitter/Retrigger Menus:** Enter probability values using the keypad.
-- **Navigation:** Use the control pad/buttons to move between menu items and select options.
+The TFT display provides a visual menu system for configuration and navigation. The menu structure is as follows:
+
+- **Main Menu:**
+  - Menu 1
+  - Menu 2
+  - Note Jitter Probability
+  - Drum Jitter Probability
+  - Retrigger Probability
+  - Random Drop Probability
+  - Delay Note Probability
+  - Stutter Temperature
+  - Channel Config
+  - Stutter Length
+  - Offset/Scale
+  - Retrigger Synth
+  - Pitchbend Probability (ptchbnd ~prob)
+  - Delay Times (min/max)
+  - Restore Defaults
+
+- **Menu 1 / Menu 2:**
+  - User-defined options (see code for details). Selectable and scrollable.
+
+- **Note Jitter / Drum Jitter / Retrigger / Random Drop / Delay Note / Pitchbend Probability / Stutter Temperature Menus:**
+  - Enter probability or value using the keypad. Press `#` to confirm, `*` to clear input. Only the '...' option is selectable; pressing select returns to the main menu.
+
+- **Channel Config Menu:**
+  - Select “set drum channels” or “set synth channels” to confirm dipswitch assignments. Can also reset to default channel assignments. s
+
+- **Stutter Length Menu:**
+  - Select from 16 different pulse resolutions (e.g., 1/32 note, 1/16 triplet, 1/4 note, etc.).
+
+- **Offset/Scale Menu:**
+  - Select from offset sets: No Offset, Any Offset, Major, Brett.
+
+- **Retrigger Synth Menu:**
+  - Enable or disable retriggering for synths.
+
+- **Delay Times Menu:**
+  - Adjust minimum and maximum delay times for delay effects using a double-slider interface.
+
+- **Restore Defaults:**
+  - Resets all menu-configurable settings to their default values.
+
+**Navigation:**
+- Use the control pad/buttons to move between menu items and select options.
+  - Up/Down: Move selection
+  - Left/Right: Scroll or adjust values (where applicable)
+  - Select: Enter submenu or confirm selection
+
+**Keypad Input:**
+- For probability/value menus, use the keypad to enter values. Press `#` to confirm, `*` to clear.
+
+All menu selections and settings are saved to EEPROM for persistence across power cycles. See the code for detailed menu logic and available options.
 
 ## Code Structure
 
@@ -103,19 +151,21 @@ The TFT display provides a visual menu system for configuration:
 
 ## Notes
 
-- Buffer holds up to 384 MIDI note events.
+- Buffer holds up to 512 MIDI note events.
 - If buffer is full, oldest notes are dropped and LED blinks.
 - MIDI Panic button kills stuck notes.
 - Channel assignments and timing can be changed live via dipswitches and menu.
-- Channel settings are saved/restored using EEPROM.
+- Most settings are saved/restored using EEPROM.
 - Extensive TODOs and architecture notes are in the code comments.
-- Blue LED lights up when enough MIDI pulses (note lengths) to stutter with; stutter does not work if this threshold is not met.
 - While stuttering, you can manipulate which channels are on by changing dipswitches and updating via the menu. Stuttered notes remain, but you can play on top for creative effects.
 - Retriggers do **not** go in the stutter buffer.
 - Notes that are jittered (note-shifted) are placed into the stutter buffer **after** adjustment.
 - It *is* possible to overwhelm the system with notes, which will cause unstable clock and dropped/damaged notes.  This doesn't seem to happen with at least my normal useage, but it's something to be aware of.  With messed up clock though, I think it's only noticeable if you have something upstream of the mangler **and** something downstream (as they'll be out of sync).  This is hard to do though, as we use separate serials for tx & rx.
 - Currently nothing is done with CCs AND they're not passed through. Adding pass through will be easy, I just haven't done it.  Still thinking through how to consider manipulating CCs.
-- Generally speaking, setting probability to zero for a feature turns it off entirely (and thus reduces CPU load)
+- Generally speaking, setting probability to zero for a feature turns it off entirely (and thus reduces CPU load, which is mostly relevant if you have something downstream that cares about clock).
+- Stutter operates on an always-rolling buffer, while live-played notes on tracked channels are not audible while stutter is active, it is still "listening", so you can immediately re-engage the stutter after releasting it (this is a change from previous behavior).
+- Glitch effects, if enabled, are always "active"-- they do not track if the sequencer is playing.  Note that clock-based effects will not advance with no new clock pulses however. This means, for instance, that if velocity coercion is on, whatever velocity value is being used for coercion will be the velocity value all notes play at while the sequencer is paused. Jittering will still take effect, etc. 
+
 
 ## Troubleshooting
 

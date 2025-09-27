@@ -94,9 +94,15 @@ channel to off and updating.  There's nuance here though-- the stuttered notes w
 
 
 //todo: could also randomly just play notes from the stutter buffer sometimes.  Call this... blooping? I dunno
+//this can be done outside of the midi read loop, so it should be fast.
 
 //I do really like the idea of forcing velocity patterns.  But there's a lot of decisions that need to be made. Like, for instance,
 //if it's per-instrument and if so if we have control over it.  
+
+//I like overall velocity coercion I think.  I have it resetting currentPulseInBar to 0 on start/continue, so it should be fine.
+//should I also reset on new switch activations so it's possible to get "off"?
+
+//instead of cycling, should I have the groove selectable via menu?
 #include "NoteStructs.h"
 #include "SortedBuffer.h"
 #include "MidiUtils.h"
@@ -350,8 +356,8 @@ MatrixKeypad keypad;
 
 
 //tempo tracker stuff
-#include "Tempo_Tracker.h"
-TempoTracker tempoTracker;
+// #include "Tempo_Tracker.h"
+// TempoTracker tempoTracker;
 
 
 const int logButtonPin = 8;
@@ -362,7 +368,7 @@ ButtonHelper logButton;
 #define BETWEEN(x, lo, hi) ((x) >= (lo) && (x) <= (hi))
 
 //constants
-const int MAX_PULSES_PER_STUTTER = 96;  //24 pulses -> 1 quarter note
+const int MAX_PULSES_PER_STUTTER = 128;  //24 pulses -> 1 quarter note
 //This could be set as a function of MAX_PULSES_PER_STUTTER
 const int MAX_EVENTS = 4 * MAX_PULSES_PER_STUTTER;
 
@@ -658,7 +664,7 @@ bool synthMIDIenabled[16]=  {
 };
 
 //one per pulse
-byte velocityCoerceValues[7][16] = {
+byte velocityCoerceValues[10][16] = {
  // Jagged Accent Stabs – high punchy hits with soft ghost notes in between
  {127, 20, 85, 18, 124, 15, 90, 22, 126, 19, 83, 17, 125, 16, 88, 21},
 
@@ -678,17 +684,29 @@ byte velocityCoerceValues[7][16] = {
  {126, 15, 92, 28, 124, 16, 88, 25, 127, 20, 83, 18, 125, 17, 91, 22},
 
  // Narcolepsy - most notes are very soft, sporadic high velocity hits
- {127, 10, 100, 12, 5, 15, 95, 14, 8, 11, 120, 13, 124, 14, 3, 12}
+ {127, 10, 100, 12, 5, 15, 95, 14, 8, 11, 120, 13, 124, 14, 3, 12},
+
+ // Nuclear Burst – almost silent then nuclear blasts
+ {3, 2, 127, 1, 5, 2, 127, 3, 1, 4, 127, 2, 6, 3, 127, 1},
+
+ // Razor Saw – alternating top-speed strikes and needle whispers
+ {127, 4, 122, 3, 127, 2, 120, 5, 127, 3, 124, 1, 127, 4, 123, 2},
+
+ // Avalanche – soft snow then collapsing with massive hits
+ {6, 10, 15, 20, 40, 70, 100, 127, 10, 6, 8, 127, 15, 4, 127, 2}
 };
 
-const char* velocityCoerceLabels[7] = {
+const char* velocityCoerceLabels[10] = {
   "Jagged Accent Stabs",
   "Rolling Push-Pull",
   "Ghost-Laden Groove",
   "Slow Swell and Crash",
   "Offbeat Snap",
   "Chaotic Pulse",
-  "Narcolepsy"
+  "Narcolepsy",
+  "Nuclear Burst",
+  "Razor Saw",
+  "Avalanche"
 };
 
 
@@ -1751,8 +1769,8 @@ if(validLoopFlag){
 
 //debug
 if(logButton.update()){
-  Serial.print(F("Current bpm: "));
-  Serial.println(tempoTracker.bpm);
+  // Serial.print(F("Current bpm: "));
+  // Serial.println(tempoTracker.bpm);
   //if we're loopoing, print out the notes and channels of everything in the buffer
   if(isLooping){
     Serial.print("There are ");
@@ -1931,8 +1949,8 @@ void manglerHandleClock() {
   }
   //add the new pulse start time
   pulseStartTimes.push(pulseTime);
-  tempoTracker.addPulse(pulseTime);
-  tempoTracker.calculateBPM();
+  // tempoTracker.addPulse(pulseTime);
+  // tempoTracker.calculateBPM();
 
   currentPulseInBar = (currentPulseInBar + 1) % 96;
   
