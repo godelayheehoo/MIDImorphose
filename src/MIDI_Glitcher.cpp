@@ -734,7 +734,7 @@ SwitchHelper jitterSwitch;
 
 //temp
 bool velocityCoercion = false;
-const int velocityCoercionSwitchPin = 22;
+const int velocityCoercionSwitchPin = 32;
 SwitchHelper velocityCoercionSwitch;
 
 byte octaveShiftOption = 0; //todo: implement
@@ -882,7 +882,7 @@ void handleClock() {
 void restoreDefaults() {
   // Drum defaults: false, false, false, false, false, false, false, false, false, true, true, false, false, false, false, false
     bool drumDefaults[16] = {false, false, false, false, false, false, false, false, true, true, true, false, false, false, false, false};
-    bool synthDefaults[16] = {true, true, true, true, true, true, true, true, true, false, false, true, true, false, false, false};
+    bool synthDefaults[16] = {true, true, true, true, true, true, true, true, false, false, false, false, true, true, true, true};
     drumState = 0;
     synthState = 0;
     for (int i = 0; i < 16; i++) {
@@ -1534,7 +1534,7 @@ if(velocityCoercionSwitch.update()){
     Serial.println(F("Resetting channel config to defaults!"));
     // Drum defaults: false, false, false, false, false, false, false, false, false, true, true, false, false, false, false, false
     bool drumDefaults[16] = {false, false, false, false, false, false, false, false, true, true, true, false, false, false, false, false};
-    bool synthDefaults[16] = {true, true, true, true, true, true, true, true, true, false, false, true, true, true, true, true};
+    bool synthDefaults[16] = {true, true, true, true, true, true, true, true, false, false, false, false, true, true, true, true};
     drumState = 0;
     synthState = 0;
     for (int i = 0; i < 16; i++) {
