@@ -334,13 +334,13 @@ struct MatrixKeypad {
   char lastKeyPressed = 0;
   void onPress(uint8_t, uint8_t, char key) {
     lastKeyPressed = key;
-    Serial.print("Pressed: ");
-    Serial.println(key);
+    // Serial.print("Pressed: ");
+    // Serial.println(key);
   }
 
   void onRelease(uint8_t, uint8_t, char key) {
-    Serial.print("Released: ");
-    Serial.println(key);
+    // Serial.print("Released: ");
+    // Serial.println(key);
   }
 };
 
@@ -1463,28 +1463,28 @@ void loop() {
   if(menuDownButton.update()){
     menu.handleInput(BUTTON_DOWN);
     menu.render();
-    Serial.println(F("Menu Down button pressed"));
+    // Serial.println(F("Menu Down button pressed"));
   }
   if(menuUpButton.update()){
     menu.handleInput(BUTTON_UP);
     menu.render();
-    Serial.println(F("Menu Up button pressed"));
+    // Serial.println(F("Menu Up button pressed"));
   }
   if(menuLeftButton.update()){
     menu.handleInput(BUTTON_LEFT);
     menu.render();
-    Serial.println(F("Menu Left button pressed"));
+    // Serial.println(F("Menu Left button pressed"));
   }
   if(menuRightButton.update()){
     menu.handleInput(BUTTON_RIGHT);
     menu.render();
-    Serial.println(F("Menu Right button pressed"));
+    // Serial.println(F("Menu Right button pressed"));
   }
 
   if(menuSelectButton.update()){
     menu.handleInput(BUTTON_SELECT);
     menu.render();
-    Serial.println(F("Menu Select button pressed"));
+    // Serial.println(F("Menu Select button pressed"));
   }
   //end debug
 
@@ -1499,10 +1499,10 @@ void loop() {
   jitterOn = jitterSwitch.isOn();
 
 if(velocityCoercionSwitch.update()){
-    Serial.println(F("Velocity Coercion switch changed!"));
+    // Serial.println(F("Velocity Coercion switch changed!"));
     if(velocityCoercionSwitch.isOn()){
     velocityCoercionIdx= (velocityCoercionIdx+1)%(sizeof(velocityCoerceValues)/sizeof(velocityCoerceValues[0]));
-    Serial.print("Coercion index is now");
+    // Serial.print("Coercion index is now");
     Serial.println(velocityCoercionIdx);
     // Start temporary view
     tempViewCallback = showVelocityCoercionLabel;
