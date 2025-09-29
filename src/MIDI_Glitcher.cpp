@@ -903,9 +903,58 @@ void restoreDefaults() {
   menu.offsetActiveIdx = 1; // Any Offset
   menu.menu1ActiveIdx = 1;
   menu.menuBActiveIdx = 1;
+  menu.noteJitterProb = 10;
+  menu.drumJitterProb = 10;
+  menu.retriggerProb = 10;
+  menu.stutterTemperature = 0;
+  menu.retriggerSynths = false;
+  menu.randomDropProb = 0;
+  menu.delayNoteProb = 0;
+  menu.pitchbendProb = 10;
+  menu.minDelayTime = 500;
+  menu.maxDelayTime = 4000;
+    // Immediately save defaults to EEPROM so future boots load correct values
+    EEPROM.write(EEPROM_ADDR_MAGIC, EEPROM_MAGIC);
+    EEPROM.put(EEPROM_ADDR_DRUM_STATE, drumState);
+    EEPROM.put(EEPROM_ADDR_SYNTH_STATE, synthState);
+  menu.saveStutterLength(EEPROM_ADDR_STUTTER_LENGTH);
+  menu.saveOffset(EEPROM_ADDR_OFFSET);
+  menu.saveMenu1(EEPROM_ADDR_MENU1);
+  menu.saveMenuB(EEPROM_ADDR_MENUB);
+  menu.saveNoteJitterProb(EEPROM_ADDR_JITTER_PROB);
+  menu.saveDrumJitterProb(EEPROM_ADDR_DRUM_JITTER_PROB);
+  menu.saveRetriggerProb(EEPROM_ADDR_RETRIGGER_PROB);
+  menu.saveStutterTemperature(EEPROM_ADDR_STUTTER_TEMPERATURE);
+  menu.saveSynthRetrigger(EEPROM_ADDR_SYNTH_RETRIGGER);
+  menu.saveRandomDropProb(EEPROM_ADDR_RANDOM_DROP_PROB);
+  menu.saveDelayNoteProb(EEPROM_ADDR_DELAY_NOTE_PROB);
+  menu.savePitchbendProb(EEPROM_ADDR_PITCHBEND_PROB);
+  menu.saveMinDelayTime(EEPROM_ADDR_MIN_DELAY_TIME);
+  menu.saveMaxDelayTime(EEPROM_ADDR_MAX_DELAY_TIME);
+
+}
+
+void disableAll() {
+  // drums do not get disabled, that'd be annoying.
+  // Drum defaults: false, false, false, false, false, false, false, false, false, true, true, false, false, false, false, false
+    bool drumDefaults[16] = {false, false, false, false, false, false, false, false, true, true, true, false, false, false, false, false};
+    bool synthDefaults[16] = {true, true, true, true, true, true, true, true, false, false, false, false, true, true, true, true};
+    drumState = 0;
+    synthState = 0;
+    for (int i = 0; i < 16; i++) {
+      drumMIDIenabled[i] = drumDefaults[i];
+      synthMIDIenabled[i] = synthDefaults[i];
+      if (drumDefaults[i]) drumState |= (1 << i);
+      if (synthDefaults[i]) synthState |= (1 << i);
+    }
+    // Set menu defaults
+  menu.stutterLengthActiveIdx = 9; // 1/4 note
+  menu.offsetActiveIdx = 1; // Any Offset
+  menu.menu1ActiveIdx = 1;
+  menu.menuBActiveIdx = 1;
   menu.noteJitterProb = 0;
   menu.drumJitterProb = 0;
-  menu.retriggerProb = 10;
+  menu.retriggerProb = 0;
   menu.stutterTemperature = 0;
   menu.retriggerSynths = false;
   menu.randomDropProb = 0;
@@ -1404,6 +1453,10 @@ void loop() {
   if (menu.readyToRestoreDefaults) {
     restoreDefaults();
     menu.readyToRestoreDefaults = false;
+  }
+  if(menu.readyToDisableAll) {
+    disableAll();
+    menu.readyToDisableAll = false;
   }
   
   //start new only-if-no-midi logic

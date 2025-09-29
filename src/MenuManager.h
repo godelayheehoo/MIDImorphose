@@ -228,6 +228,8 @@ public:
     void saveMaxDelayTime(int eepromAddr);
     // Flag to request restoreDefaults from main loop
     bool readyToRestoreDefaults = false;
+    bool readyToDisableAll = false;
+ 
 public:
     Adafruit_ST7789& tft;
     // Main menu selection

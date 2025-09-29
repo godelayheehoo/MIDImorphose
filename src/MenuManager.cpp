@@ -19,8 +19,8 @@ const MenuHandlers menuHandlersTable[] = {
     { &MenuManager::stutterTemperatureMenuUp, &MenuManager::stutterTemperatureMenuDown, &MenuManager::stutterTemperatureMenuLeft, &MenuManager::stutterTemperatureMenuRight, &MenuManager::stutterTemperatureMenuSelect }, // STUTTER_TEMPERATURE_MENU
     { &MenuManager::retriggerSynthMenuUp, & MenuManager::retriggerSynthMenuDown, & MenuManager::retriggerSynthMenuLeft, & MenuManager::retriggerSynthMenuRight, & MenuManager::retriggerSynthMenuSelect }, // RETRIGGER_SYNTH_MENU
     { &MenuManager::pitchbendProbMenuUp, & MenuManager::pitchbendProbMenuDown, & MenuManager::pitchbendProbMenuLeft, & MenuManager::pitchbendProbMenuRight, & MenuManager::pitchbendProbMenuSelect }, // PITCHBEND_PROB_MENU
-    { &MenuManager::delayTimesMenuUp, & MenuManager::delayTimesMenuDown, & MenuManager::delayTimesMenuLeft, & MenuManager::delayTimesMenuRight, & MenuManager::delayTimesMenuSelect } // DELAY_TIMES_MENU
-};
+    { &MenuManager::delayTimesMenuUp, & MenuManager::delayTimesMenuDown, & MenuManager::delayTimesMenuLeft, & MenuManager::delayTimesMenuRight, & MenuManager::delayTimesMenuSelect }, // DELAY_TIMES_MENU
+    };
 
 void MenuManager::saveStutterLength(int eepromAddr) {
     EEPROM.write(EEPROM_ADDR_MAGIC, EEPROM_MAGIC);
@@ -208,9 +208,9 @@ void MenuManager::handlePitchbendProbKeypad(char key) {
 
 void MenuManager::render() {
     if (currentMenu == MAIN_MENU) {
-        // Main menu: list of menus
-        // Add ptchbnd ~prob before Restore Defaults
-        const char* menus[15] = {"Menu 1", "Menu 2", "Note Jitter Prob", "Drum Jitter Prob", "Retrigger Prob", "Random Drop Prob", "Delay Note Prob", "StutterTemperature", "Channel Config", "Stutter Length", "Offset/Scale", "Retrigger Synth", "ptchbnd ~prob","delay times", "Restore Defaults"};
+    // Main menu: list of menus
+    // Add ptchbnd ~prob before Restore Defaults, and add Disable All as last item
+    const char* menus[16] = {"Menu 1", "Menu 2", "Note Jitter Prob", "Drum Jitter Prob", "Retrigger Prob", "Random Drop Prob", "Delay Note Prob", "StutterTemperature", "Channel Config", "Stutter Length", "Offset/Scale", "Retrigger Synth", "ptchbnd ~prob","delay times", "Restore Defaults", "Disable All"};
         int yStart = 10;
         tft.setTextSize(2);
         tft.setCursor(10, yStart);
@@ -220,7 +220,7 @@ void MenuManager::render() {
         // Main menu labels
         int itemIdx = mainMenuScrollIdx;
         int y = yStart;
-        for (int visible = 0; visible < MAIN_MENU_VISIBLE_ITEMS && itemIdx < 15; ++visible, ++itemIdx) {
+    for (int visible = 0; visible < MAIN_MENU_VISIBLE_ITEMS && itemIdx < 16; ++visible, ++itemIdx) {
             tft.setCursor(20, y + 30);
             if (mainMenuSelectedIdx == itemIdx) {
                 tft.setTextColor(ST77XX_BLACK, ST77XX_WHITE);
@@ -526,38 +526,7 @@ void MenuManager::render() {
         tft.setTextColor(ST77XX_YELLOW);
         tft.setCursor(10, 120);
         tft.print("press # when done, press * to restart");
-    } else if (currentMenu == DELAY_NOTE_PROB_MENU) {
-        tft.fillScreen(ST77XX_BLACK);
-        // Title at top
-        tft.setTextSize(2);
-        tft.setTextColor(ST77XX_WHITE);
-        tft.setCursor(10, 10);
-        tft.print("delay note prob");
-
-        // '...' at top, always highlighted
-        tft.setTextSize(2);
-        tft.setCursor(10, 40);
-        tft.setTextColor(ST77XX_BLACK, ST77XX_WHITE);
-        tft.print("...");
-
-        // Number in middle, always cyan
-        tft.setTextSize(3);
-        tft.setCursor(40, 80);
-        tft.setTextColor(ST77XX_CYAN, ST77XX_BLACK);
-        if (delayNoteInputBuffer.length() > 0) {
-            tft.print(delayNoteInputBuffer);
-        } else {
-            tft.print("0");
-        }
-
-        // Instructions at bottom
-        tft.setTextSize(1);
-        tft.setTextColor(ST77XX_YELLOW);
-        tft.setCursor(10, 120);
-        tft.print("press # when done, press * to restart");
-    }
-
-    else if (currentMenu == DELAY_TIMES_MENU){
+    } else if (currentMenu == DELAY_TIMES_MENU){
     tft.fillScreen(ST77XX_BLACK);
     tft.setTextSize(2);
     tft.setTextColor(ST77XX_WHITE);
@@ -697,7 +666,7 @@ void MenuManager::mainMenuUp() {
     }
 }
 void MenuManager::mainMenuDown() {
-    if (mainMenuSelectedIdx < 14) { // 15 items, idx 0-14
+    if (mainMenuSelectedIdx < 15) { // 16 items, idx 0-15
         mainMenuSelectedIdx++;
         if (mainMenuSelectedIdx > mainMenuScrollIdx + MAIN_MENU_VISIBLE_ITEMS - 1) {
             mainMenuScrollIdx = mainMenuSelectedIdx - MAIN_MENU_VISIBLE_ITEMS + 1;
@@ -774,6 +743,9 @@ void MenuManager::mainMenuSelect() {
             break;
         case 14:
             readyToRestoreDefaults = true;
+            break;
+        case 15:
+            readyToDisableAll = true;
             break;
         default:
             break;
