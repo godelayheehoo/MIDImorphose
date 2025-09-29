@@ -1,7 +1,26 @@
 
+
 // Save menu settings to EEPROM
 #include <EEPROM.h>
 #include "MenuManager.h"
+
+const MenuHandlers menuHandlersTable[] = {
+    { &MenuManager::mainMenuUp, &MenuManager::mainMenuDown, &MenuManager::mainMenuLeft, &MenuManager::mainMenuRight, &MenuManager::mainMenuSelect }, // MAIN_MENU
+    { &MenuManager::menu1Up, &MenuManager::menu1Down, &MenuManager::menu1Left, &MenuManager::menu1Right, &MenuManager::menu1Select },               // MENU_1
+    { &MenuManager::menu2Up, &MenuManager::menu2Down, &MenuManager::menu2Left, &MenuManager::menu2Right, &MenuManager::menu2Select },                // MENU_2
+    { &MenuManager::noteJitterProbMenuUp, &MenuManager::noteJitterProbMenuDown, &MenuManager::noteJitterProbMenuLeft, &MenuManager::noteJitterProbMenuRight, &MenuManager::noteJitterProbMenuSelect }, // NOTE_JITTER_PROB_MENU
+    { &MenuManager::drumJitterProbMenuUp, &MenuManager::drumJitterProbMenuDown, &MenuManager::drumJitterProbMenuLeft, &MenuManager::drumJitterProbMenuRight, &MenuManager::drumJitterProbMenuSelect }, // DRUM_JITTER_PROB_MENU
+    { &MenuManager::retriggerProbMenuUp, &MenuManager::retriggerProbMenuDown, &MenuManager::retriggerProbMenuLeft, &MenuManager::retriggerProbMenuRight, &MenuManager::retriggerProbMenuSelect }, // RETRIGGER_PROB_MENU
+    { &MenuManager::randomDropProbMenuUp, &MenuManager::randomDropProbMenuDown, &MenuManager::randomDropProbMenuLeft, &MenuManager::randomDropProbMenuRight, &MenuManager::randomDropProbMenuSelect }, // RANDOM_DROP_PROB_MENU
+    { &MenuManager::delayNoteProbMenuUp, &MenuManager::delayNoteProbMenuDown, &MenuManager::delayNoteProbMenuLeft, &MenuManager::delayNoteProbMenuRight, &MenuManager::delayNoteProbMenuSelect }, // DELAY_NOTE_PROB_MENU
+    { &MenuManager::channelConfigMenuUp, &MenuManager::channelConfigMenuDown, &MenuManager::channelConfigMenuLeft, &MenuManager::channelConfigMenuRight, &MenuManager::channelConfigMenuSelect }, // CHANNEL_CONFIG_MENU
+    { &MenuManager::stutterLengthMenuUp, &MenuManager::stutterLengthMenuDown, &MenuManager::stutterLengthMenuLeft, &MenuManager::stutterLengthMenuRight, &MenuManager::stutterLengthMenuSelect }, // STUTTER_LENGTH_MENU
+    { &MenuManager::offsetMenuUp, &MenuManager::offsetMenuDown, &MenuManager::offsetMenuLeft, &MenuManager::offsetMenuRight, &MenuManager::offsetMenuSelect }, // OFFSET_MENU
+    { &MenuManager::stutterTemperatureMenuUp, &MenuManager::stutterTemperatureMenuDown, &MenuManager::stutterTemperatureMenuLeft, &MenuManager::stutterTemperatureMenuRight, &MenuManager::stutterTemperatureMenuSelect }, // STUTTER_TEMPERATURE_MENU
+    { &MenuManager::retriggerSynthMenuUp, & MenuManager::retriggerSynthMenuDown, & MenuManager::retriggerSynthMenuLeft, & MenuManager::retriggerSynthMenuRight, & MenuManager::retriggerSynthMenuSelect }, // RETRIGGER_SYNTH_MENU
+    { &MenuManager::pitchbendProbMenuUp, & MenuManager::pitchbendProbMenuDown, & MenuManager::pitchbendProbMenuLeft, & MenuManager::pitchbendProbMenuRight, & MenuManager::pitchbendProbMenuSelect }, // PITCHBEND_PROB_MENU
+    { &MenuManager::delayTimesMenuUp, & MenuManager::delayTimesMenuDown, & MenuManager::delayTimesMenuLeft, & MenuManager::delayTimesMenuRight, & MenuManager::delayTimesMenuSelect } // DELAY_TIMES_MENU
+};
 
 void MenuManager::saveStutterLength(int eepromAddr) {
     EEPROM.write(EEPROM_ADDR_MAGIC, EEPROM_MAGIC);
@@ -92,331 +111,32 @@ MenuManager::MenuManager(Adafruit_ST7789& display) : tft(display), currentMenu(M
 
 
 void MenuManager::handleInput(MenuButton btn) {
-    // Channel config menu: select triggers pending update flags
-    extern bool pendingDrumChannelUpdate;
-    extern bool pendingSynthChannelUpdate;
-    if (currentMenu == CHANNEL_CONFIG_MENU) {
-        // Scroll logic: 4 options, show 3 at a time
-        const int numOptions = 4;
-        const int visibleOptions = 3;
-        static int scrollIdx = 0;
-        if (btn == BUTTON_UP) {
-            if (channelConfigSelectedIdx > 0) channelConfigSelectedIdx--;
-            if (channelConfigSelectedIdx < scrollIdx) scrollIdx = channelConfigSelectedIdx;
-        } else if (btn == BUTTON_DOWN) {
-            if (channelConfigSelectedIdx < numOptions - 1) channelConfigSelectedIdx++;
-            if (channelConfigSelectedIdx > scrollIdx + visibleOptions - 1) scrollIdx = channelConfigSelectedIdx - visibleOptions + 1;
-        } else if (btn == BUTTON_SELECT) {
-            if (channelConfigSelectedIdx == 1) {
-                pendingSynthChannelUpdate = true;
-            } else if (channelConfigSelectedIdx == 2) {
-                pendingDrumChannelUpdate = true;
-            } else if (channelConfigSelectedIdx == 3) {
-                pendingChannelDefaultsReset = true;
-            } else if (channelConfigSelectedIdx == 0) {
-                // '...' selected, return to main menu
-                currentMenu = MAIN_MENU;
-            }
-        }
-        // Store scrollIdx for rendering
-        channelConfigScrollIdx = scrollIdx;
-        return;
+    // Map button to handler index
+    int handlerIdx = -1;
+    switch (btn) {
+        case BUTTON_UP: handlerIdx = 0; break;
+        case BUTTON_DOWN: handlerIdx = 1; break;
+        case BUTTON_LEFT: handlerIdx = 2; break;
+        case BUTTON_RIGHT: handlerIdx = 3; break;
+        case BUTTON_SELECT: handlerIdx = 4; break;
+        default: return; // Unknown button
     }
-    //todo: consolidate these into the switch statement below
-    // Jitter menu: only '...' is selectable, select returns to main menu
-    if (currentMenu == NOTE_JITTER_PROB_MENU) {
-        if (btn == BUTTON_SELECT) {
-            currentMenu = MAIN_MENU;
+    // Call the handler from the table
+    if (currentMenu >= 0 && currentMenu < (sizeof(menuHandlersTable)/sizeof(menuHandlersTable[0]))) {
+        // Assuming your struct is:
+        // struct MenuHandlers { MenuActionHandler up, down, left, right, select; };
+        MenuActionHandler handler = nullptr;
+        switch (handlerIdx) {
+            case 0: handler = menuHandlersTable[currentMenu].onUp; break;
+            case 1: handler = menuHandlersTable[currentMenu].onDown; break;
+            case 2: handler = menuHandlersTable[currentMenu].onLeft; break;
+            case 3: handler = menuHandlersTable[currentMenu].onRight; break;
+            case 4: handler = menuHandlersTable[currentMenu].onSelect; break;
+            default: {handler = nullptr; Serial.println("Error: Invalid handler index"); break;} // Handles unexpected values
         }
-        // Up/down do nothing
-        return;
-    }
-    // Drum Jitter menu: only '...' is selectable, select returns to main menu
-    if (currentMenu == DRUM_JITTER_PROB_MENU) {
-        if (btn == BUTTON_SELECT) {
-            currentMenu = MAIN_MENU;
+        if (handler) {
+            (this->*handler)();
         }
-        // Up/down do nothing
-        return;
-    }
-    // Retrigger menu: only '...' is selectable, select returns to main menu
-    if (currentMenu == RETRIGGER_PROB_MENU) {
-        if (btn == BUTTON_SELECT) {
-            currentMenu = MAIN_MENU;
-        }
-        // Up/down do nothing
-        return;
-    }
-        // Stutter temperature menu: only '...' is selectable, select returns to main menu
-    if (currentMenu == STUTTER_TEMPERATURE_MENU) {
-        if (btn == BUTTON_SELECT) {
-            currentMenu = MAIN_MENU;
-        }
-        // Up/down do nothing
-        return;
-    }
-        // Delay Note Prob menu: only '...' is selectable, select returns to main menu
-    if (currentMenu == DELAY_NOTE_PROB_MENU) {
-        if (btn == BUTTON_SELECT) {
-            currentMenu = MAIN_MENU;
-        }
-        // Up/down do nothing
-        return;
-    }
-    if (currentMenu == RANDOM_DROP_PROB_MENU) {
-        if (btn == BUTTON_SELECT) {
-            currentMenu = MAIN_MENU;
-        }
-        // Up/down do nothing
-        return;
-    }
-     if (currentMenu == PITCHBEND_PROB_MENU) {
-        if (btn == BUTTON_SELECT) {
-            currentMenu = MAIN_MENU;
-        }
-        // Up/down do nothing
-        return;
-    }
-    // Retrigger Synth menu: three options, select sets retriggerSynths and returns to main menu
-    if (currentMenu == RETRIGGER_SYNTH_MENU) {
-        if (btn == BUTTON_UP) {
-            if (retriggerSynthSelectedIdx > 0) retriggerSynthSelectedIdx--;
-        } else if (btn == BUTTON_DOWN) {
-            if (retriggerSynthSelectedIdx < 2) retriggerSynthSelectedIdx++;
-        } else if (btn == BUTTON_SELECT) {
-            if (retriggerSynthSelectedIdx == 0) {
-                currentMenu = MAIN_MENU;
-            } else if (retriggerSynthSelectedIdx == 1) {
-                retriggerSynths = true;
-                saveSynthRetrigger(EEPROM_ADDR_SYNTH_RETRIGGER);
-            } else if (retriggerSynthSelectedIdx == 2) {
-                retriggerSynths = false;
-                saveSynthRetrigger(EEPROM_ADDR_SYNTH_RETRIGGER);
-            }
-        }
-        return;
-    }
-    switch (currentMenu) {
-        case MAIN_MENU: {
-            // Now 15 items: add ptchbnd ~prob before Restore Defaults
-            if (btn == BUTTON_UP) {
-                if (mainMenuSelectedIdx > 0) {
-                    mainMenuSelectedIdx--;
-                    if (mainMenuSelectedIdx < mainMenuScrollIdx) {
-                        mainMenuScrollIdx = mainMenuSelectedIdx;
-                    }
-                }
-            } else if (btn == BUTTON_DOWN) {
-                if (mainMenuSelectedIdx < 14) {
-                    mainMenuSelectedIdx++;
-                    if (mainMenuSelectedIdx > mainMenuScrollIdx + MAIN_MENU_VISIBLE_ITEMS - 1) {
-                        mainMenuScrollIdx = mainMenuSelectedIdx - MAIN_MENU_VISIBLE_ITEMS + 1;
-                    }
-                }
-            } else if (btn == BUTTON_SELECT) {
-                if (mainMenuSelectedIdx == 0) {
-                    currentMenu = MENU_1;
-                    menu1SelectedIdx = 0;
-                    menu1ScrollIdx = 0;
-                } else if (mainMenuSelectedIdx == 1) {
-                    currentMenu = MENU_2;
-                    menuBSelectedIdx = 0;
-                    menuBScrollIdx = 0;
-                } else if (mainMenuSelectedIdx == 2) {
-                    currentMenu = NOTE_JITTER_PROB_MENU;
-                    jitterInputBuffer = String(noteJitterProb);
-                } else if (mainMenuSelectedIdx == 3) {
-                    currentMenu = DRUM_JITTER_PROB_MENU;
-                    drumJitterInputBuffer = String(drumJitterProb);
-                } else if (mainMenuSelectedIdx == 4) {
-                    currentMenu = RETRIGGER_PROB_MENU;
-                    retriggerInputBuffer = String(retriggerProb);
-                } else if (mainMenuSelectedIdx == 5) {
-                    currentMenu = RANDOM_DROP_PROB_MENU;
-                    randomDropInputBuffer = String(randomDropProb);
-                } else if (mainMenuSelectedIdx == 6) {
-                    currentMenu = DELAY_NOTE_PROB_MENU;
-                    delayNoteInputBuffer = String(delayNoteProb);
-                } else if (mainMenuSelectedIdx == 7) {
-                    currentMenu = STUTTER_TEMPERATURE_MENU;
-                    stutterTemperatureInputBuffer = String(stutterTemperature);
-                } else if (mainMenuSelectedIdx == 8) {
-                    currentMenu = CHANNEL_CONFIG_MENU;
-                    channelConfigSelectedIdx = 0;
-                } else if (mainMenuSelectedIdx == 9) {
-                    currentMenu = STUTTER_LENGTH_MENU;
-                    stutterLengthSelectedIdx = 0;
-                    stutterLengthScrollIdx = 0;
-                } else if (mainMenuSelectedIdx == 10) {
-                    currentMenu = OFFSET_MENU;
-                    offsetSelectedIdx = 0;
-                    offsetScrollIdx = 0;
-                } else if (mainMenuSelectedIdx == 11) {
-                    currentMenu = RETRIGGER_SYNTH_MENU;
-                    retriggerSynthSelectedIdx = 0;
-                } else if (mainMenuSelectedIdx == 12) {
-                    currentMenu = PITCHBEND_PROB_MENU;
-                    pitchbendProbInputBuffer = String(pitchbendProb);
-                }  else if (mainMenuSelectedIdx == 13) {
-                    currentMenu = DELAY_TIMES_MENU;
-                    delayTimeSelectedIdx = 0;
-                }else if (mainMenuSelectedIdx == 14) {
-                    // Restore Defaults selected
-                    readyToRestoreDefaults = true;
-                }
-                
-            }
-            break;
-        case OFFSET_MENU: {
-            if (btn == BUTTON_SELECT) {
-                if (offsetSelectedIdx == 0) {
-                    currentMenu = MAIN_MENU;
-                } else {
-                    offsetActiveIdx = offsetSelectedIdx;
-                    currentOffsetSet = &OFFSET_SETS[offsetSelectedIdx - 1];
-                    saveOffset(EEPROM_ADDR_OFFSET);
-                }
-            } else if (btn == BUTTON_UP) {
-                if (offsetSelectedIdx > offsetScrollIdx) {
-                    offsetSelectedIdx--;
-                } else if (offsetScrollIdx > 0) {
-                    offsetScrollIdx--;
-                    offsetSelectedIdx = offsetScrollIdx;
-                }
-            } else if (btn == BUTTON_DOWN) {
-                int lastVisibleIdx = offsetScrollIdx + OFFSET_VISIBLE_OPTIONS - 1;
-                if (offsetSelectedIdx < lastVisibleIdx && offsetSelectedIdx < OFFSET_TOTAL_ITEMS - 1) {
-                    offsetSelectedIdx++;
-                } else if (lastVisibleIdx < OFFSET_TOTAL_ITEMS - 1) {
-                    offsetScrollIdx++;
-                    offsetSelectedIdx = offsetScrollIdx + OFFSET_VISIBLE_OPTIONS - 1;
-                }
-            }
-            break;
-        }
-        }
-        case STUTTER_LENGTH_MENU: {
-            // Only allow selection within visible options
-            if (btn == BUTTON_SELECT) {
-                if (stutterLengthSelectedIdx == 0) {
-                    currentMenu = MAIN_MENU;
-                } else {
-                    stutterLengthActiveIdx = stutterLengthSelectedIdx;
-                    pulseResolution = STUTTER_LENGTH_PULSE_RESOLUTIONS[stutterLengthSelectedIdx - 1];
-                    saveStutterLength(EEPROM_ADDR_STUTTER_LENGTH);
-                }
-            } else if (btn == BUTTON_UP) {
-                if (stutterLengthSelectedIdx > stutterLengthScrollIdx) {
-                    stutterLengthSelectedIdx--;
-                } else if (stutterLengthScrollIdx > 0) {
-                    stutterLengthScrollIdx--;
-                    stutterLengthSelectedIdx = stutterLengthScrollIdx;
-                }
-            } else if (btn == BUTTON_DOWN) {
-                int lastVisibleIdx = stutterLengthScrollIdx + STUTTER_LENGTH_VISIBLE_OPTIONS - 1;
-                if (stutterLengthSelectedIdx < lastVisibleIdx && stutterLengthSelectedIdx < STUTTER_LENGTH_TOTAL_ITEMS - 1) {
-                    stutterLengthSelectedIdx++;
-                } else if (lastVisibleIdx < STUTTER_LENGTH_TOTAL_ITEMS - 1) {
-                    stutterLengthScrollIdx++;
-                    stutterLengthSelectedIdx = stutterLengthScrollIdx + STUTTER_LENGTH_VISIBLE_OPTIONS - 1;
-                }
-            }
-            break;
-        }
-        case DELAY_TIMES_MENU:
-            if (btn==BUTTON_SELECT){
-                if (delayTimeSelectedIdx==0){
-                    // '...' selected, save and return to main menu
-                    saveMinDelayTime(EEPROM_ADDR_MIN_DELAY_TIME);
-                    saveMaxDelayTime(EEPROM_ADDR_MAX_DELAY_TIME);
-                    currentMenu=MAIN_MENU;
-
-                } else if (delayTimeSelectedIdx==1){
-                    // Min Delay Time selected
-                } else if (delayTimeSelectedIdx==2){
-                    // Max Delay Time selected
-                }
-            }
-            else if (btn==BUTTON_DOWN){
-                if (delayTimeSelectedIdx<2) delayTimeSelectedIdx++;
-            }
-            else if (btn==BUTTON_UP){
-                if (delayTimeSelectedIdx>0) delayTimeSelectedIdx--;
-            }
-            else if (btn==BUTTON_RIGHT){
-                // Increment value
-                if (delayTimeSelectedIdx==1){
-                    minDelayTime+=100;
-                    if (minDelayTime>maxDelayTime) minDelayTime=maxDelayTime;
-                } else if (delayTimeSelectedIdx==2){
-                    maxDelayTime+=100;
-                    if (maxDelayTime>60000) maxDelayTime=60000; // Cap at 60 seconds
-                }
-            }
-            else if (btn==BUTTON_LEFT){
-                // Decrement value
-                if (delayTimeSelectedIdx==1){
-                    if (minDelayTime>=20) minDelayTime-=100;
-                    else minDelayTime=0;
-                } else if (delayTimeSelectedIdx==2){
-                    if (maxDelayTime>=200) maxDelayTime-=100;
-                    else maxDelayTime=0;
-                }
-            }
-            break;
-
-        case MENU_1:
-            if (btn == BUTTON_SELECT) {
-                if (menu1SelectedIdx == 0) {
-                    currentMenu = MAIN_MENU;
-                } else {
-                    menu1ActiveIdx = menu1SelectedIdx;
-                    saveMenu1(EEPROM_ADDR_MENU1);
-                }
-            } else if (btn == BUTTON_UP) {
-                if (menu1SelectedIdx > 0) {
-                    menu1SelectedIdx--;
-                    if (menu1SelectedIdx < menu1ScrollIdx) {
-                        menu1ScrollIdx = menu1SelectedIdx;
-                    }
-                }
-            } else if (btn == BUTTON_DOWN) {
-                if (menu1SelectedIdx < MENU1_TOTAL_ITEMS - 1) {
-                    menu1SelectedIdx++;
-                    if (menu1SelectedIdx > menu1ScrollIdx + MENU1_VISIBLE_OPTIONS - 1) {
-                        menu1ScrollIdx = menu1SelectedIdx - MENU1_VISIBLE_OPTIONS + 1;
-                    }
-                }
-            } else if (btn == BUTTON_RIGHT && menu1SelectedIdx == 0) {
-                // Only allow right navigation when '...' is highlighted
-            }
-            break;
-        case MENU_2:
-            if (btn == BUTTON_SELECT) {
-                if (menuBSelectedIdx == 0) {
-                    currentMenu = MAIN_MENU;
-                } else {
-                    menuBActiveIdx = menuBSelectedIdx;
-                    saveMenuB(EEPROM_ADDR_MENUB);
-                }
-            } else if (btn == BUTTON_UP) {
-                if (menuBSelectedIdx > 0) {
-                    menuBSelectedIdx--;
-                    if (menuBSelectedIdx < menuBScrollIdx) {
-                        menuBScrollIdx = menuBSelectedIdx;
-                    }
-                }
-            } else if (btn == BUTTON_DOWN) {
-                if (menuBSelectedIdx < MENUB_TOTAL_ITEMS - 1) {
-                    menuBSelectedIdx++;
-                    if (menuBSelectedIdx > menuBScrollIdx + MENUB_VISIBLE_OPTIONS - 1) {
-                        menuBScrollIdx = menuBSelectedIdx - MENUB_VISIBLE_OPTIONS + 1;
-                    }
-                }
-            }
-            break;
-        default:
-            break;
     }
 }
 
@@ -965,3 +685,454 @@ void MenuManager::renderProbabilityMenu(const char* title, const String& inputBu
     tft.print("press # when done, press * to restart");
 }
 
+
+// Handler functions for each menu (stubs)
+// MAIN_MENU
+void MenuManager::mainMenuUp() {
+    if (mainMenuSelectedIdx > 0) {
+        mainMenuSelectedIdx--;
+        if (mainMenuSelectedIdx < mainMenuScrollIdx) {
+            mainMenuScrollIdx = mainMenuSelectedIdx;
+        }
+    }
+}
+void MenuManager::mainMenuDown() {
+    if (mainMenuSelectedIdx < 14) { // 15 items, idx 0-14
+        mainMenuSelectedIdx++;
+        if (mainMenuSelectedIdx > mainMenuScrollIdx + MAIN_MENU_VISIBLE_ITEMS - 1) {
+            mainMenuScrollIdx = mainMenuSelectedIdx - MAIN_MENU_VISIBLE_ITEMS + 1;
+        }
+    }
+}
+void MenuManager::mainMenuLeft() {
+    // No left navigation in main menu
+}
+void MenuManager::mainMenuRight() {
+    // No right navigation in main menu
+}
+void MenuManager::mainMenuSelect() {
+    switch (mainMenuSelectedIdx) {
+        case 0:
+            currentMenu = MENU_1;
+            menu1SelectedIdx = 0;
+            menu1ScrollIdx = 0;
+            break;
+        case 1:
+            currentMenu = MENU_2;
+            menuBSelectedIdx = 0;
+            menuBScrollIdx = 0;
+            break;
+        case 2:
+            currentMenu = NOTE_JITTER_PROB_MENU;
+            jitterInputBuffer = String(noteJitterProb);
+            break;
+        case 3:
+            currentMenu = DRUM_JITTER_PROB_MENU;
+            drumJitterInputBuffer = String(drumJitterProb);
+            break;
+        case 4:
+            currentMenu = RETRIGGER_PROB_MENU;
+            retriggerInputBuffer = String(retriggerProb);
+            break;
+        case 5:
+            currentMenu = RANDOM_DROP_PROB_MENU;
+            randomDropInputBuffer = String(randomDropProb);
+            break;
+        case 6:
+            currentMenu = DELAY_NOTE_PROB_MENU;
+            delayNoteInputBuffer = String(delayNoteProb);
+            break;
+        case 7:
+            currentMenu = STUTTER_TEMPERATURE_MENU;
+            stutterTemperatureInputBuffer = String(stutterTemperature);
+            break;
+        case 8:
+            currentMenu = CHANNEL_CONFIG_MENU;
+            channelConfigSelectedIdx = 0;
+            break;
+        case 9:
+            currentMenu = STUTTER_LENGTH_MENU;
+            stutterLengthSelectedIdx = 0;
+            stutterLengthScrollIdx = 0;
+            break;
+        case 10:
+            currentMenu = OFFSET_MENU;
+            offsetSelectedIdx = 0;
+            offsetScrollIdx = 0;
+            break;
+        case 11:
+            currentMenu = RETRIGGER_SYNTH_MENU;
+            retriggerSynthSelectedIdx = 0;
+            break;
+        case 12:
+            currentMenu = PITCHBEND_PROB_MENU;
+            pitchbendProbInputBuffer = String(pitchbendProb);
+            break;
+        case 13:
+            currentMenu = DELAY_TIMES_MENU;
+            delayTimeSelectedIdx = 0;
+            break;
+        case 14:
+            readyToRestoreDefaults = true;
+            break;
+        default:
+            break;
+    }
+}
+
+// MENU_1
+void MenuManager::menu1Up() {
+    if (menu1SelectedIdx > 0) {
+        menu1SelectedIdx--;
+        if (menu1SelectedIdx < menu1ScrollIdx) {
+            menu1ScrollIdx = menu1SelectedIdx;
+        }
+    }
+}
+void MenuManager::menu1Down() {
+    if (menu1SelectedIdx < MENU1_TOTAL_ITEMS - 1) {
+        menu1SelectedIdx++;
+        if (menu1SelectedIdx > menu1ScrollIdx + MENU1_VISIBLE_OPTIONS - 1) {
+            menu1ScrollIdx = menu1SelectedIdx - MENU1_VISIBLE_OPTIONS + 1;
+        }
+    }
+}
+void MenuManager::menu1Left() {
+    // No left navigation in menu1
+}
+void MenuManager::menu1Right() {
+    // No right navigation in menu1
+}
+void MenuManager::menu1Select() {
+    if (menu1SelectedIdx == 0) {
+        currentMenu = MAIN_MENU;
+    } else {
+        menu1ActiveIdx = menu1SelectedIdx;
+        saveMenu1(EEPROM_ADDR_MENU1);
+    }
+}
+
+// MENU_2
+void MenuManager::menu2Up() {
+    if (menuBSelectedIdx > 0) {
+        menuBSelectedIdx--;
+        if (menuBSelectedIdx < menuBScrollIdx) {
+            menuBScrollIdx = menuBSelectedIdx;
+        }
+    }
+}
+void MenuManager::menu2Down() {
+    if (menuBSelectedIdx < MENUB_TOTAL_ITEMS - 1) {
+        menuBSelectedIdx++;
+        if (menuBSelectedIdx > menuBScrollIdx + MENUB_VISIBLE_OPTIONS - 1) {
+            menuBScrollIdx = menuBSelectedIdx - MENUB_VISIBLE_OPTIONS + 1;
+        }
+    }
+}
+void MenuManager::menu2Left() {
+    // No left navigation in menu2
+}
+void MenuManager::menu2Right() {
+    // No right navigation in menu2
+}
+void MenuManager::menu2Select() {
+    if (menuBSelectedIdx == 0) {
+        currentMenu = MAIN_MENU;
+    } else {
+        menuBActiveIdx = menuBSelectedIdx;
+        saveMenuB(EEPROM_ADDR_MENUB);
+    }
+}
+
+// NOTE_JITTER_PROB_MENU
+// Up does nothing in probability menus
+void MenuManager::noteJitterProbMenuUp() {
+    // No action
+}
+// Down does nothing in probability menus
+void MenuManager::noteJitterProbMenuDown() {
+    // No action
+}
+// Left does nothing in probability menus
+void MenuManager::noteJitterProbMenuLeft() {
+    // No action
+}
+// Right does nothing in probability menus
+void MenuManager::noteJitterProbMenuRight() {
+    // No action
+}
+// Select returns to main menu in probability menus
+void MenuManager::noteJitterProbMenuSelect() {
+    currentMenu = MAIN_MENU;
+}
+
+// DRUM_JITTER_PROB_MENU
+void MenuManager::drumJitterProbMenuUp() {
+    // No action
+}
+void MenuManager::drumJitterProbMenuDown() {
+    // No action
+}
+void MenuManager::drumJitterProbMenuLeft() {
+    // No action
+}
+void MenuManager::drumJitterProbMenuRight() {
+    // No action
+}
+void MenuManager::drumJitterProbMenuSelect() {
+    currentMenu = MAIN_MENU;
+}
+
+// RETRIGGER_PROB_MENU
+void MenuManager::retriggerProbMenuUp() {
+    // No action
+}
+void MenuManager::retriggerProbMenuDown() {
+    // No action
+}
+void MenuManager::retriggerProbMenuLeft() {
+    // No action
+}
+void MenuManager::retriggerProbMenuRight() {
+    // No action
+}
+void MenuManager::retriggerProbMenuSelect() {
+    currentMenu = MAIN_MENU;
+}
+
+// RANDOM_DROP_PROB_MENU
+void MenuManager::randomDropProbMenuUp() {
+    // No action
+}
+void MenuManager::randomDropProbMenuDown() {
+    // No action
+}
+void MenuManager::randomDropProbMenuLeft() {
+    // No action
+}
+void MenuManager::randomDropProbMenuRight() {
+    // No action
+}
+void MenuManager::randomDropProbMenuSelect() {
+    currentMenu = MAIN_MENU;
+}
+
+// DELAY_NOTE_PROB_MENU
+void MenuManager::delayNoteProbMenuUp() {
+    // No action
+}
+void MenuManager::delayNoteProbMenuDown() {
+    // No action
+}
+void MenuManager::delayNoteProbMenuLeft() {
+    // No action
+}
+void MenuManager::delayNoteProbMenuRight() {
+    // No action
+}
+void MenuManager::delayNoteProbMenuSelect() {
+    currentMenu = MAIN_MENU;
+}
+
+// CHANNEL_CONFIG_MENU
+// Up: move selection up, update scroll index
+void MenuManager::channelConfigMenuUp() {
+    const int numOptions = 4;
+    const int visibleOptions = 3;
+    if (channelConfigSelectedIdx > 0) channelConfigSelectedIdx--;
+    if (channelConfigSelectedIdx < channelConfigScrollIdx) channelConfigScrollIdx = channelConfigSelectedIdx;
+}
+// Down: move selection down, update scroll index
+void MenuManager::channelConfigMenuDown() {
+    const int numOptions = 4;
+    const int visibleOptions = 3;
+    if (channelConfigSelectedIdx < numOptions - 1) channelConfigSelectedIdx++;
+    if (channelConfigSelectedIdx > channelConfigScrollIdx + visibleOptions - 1) channelConfigScrollIdx = channelConfigSelectedIdx - visibleOptions + 1;
+}
+// Left: no action
+void MenuManager::channelConfigMenuLeft() {
+    // No action
+}
+// Right: no action
+void MenuManager::channelConfigMenuRight() {
+    // No action
+}
+// Select: perform action based on selection
+void MenuManager::channelConfigMenuSelect() {
+
+    if (channelConfigSelectedIdx == 1) {
+        pendingSynthChannelUpdate = true;
+    } else if (channelConfigSelectedIdx == 2) {
+        pendingDrumChannelUpdate = true;
+    } else if (channelConfigSelectedIdx == 3) {
+        pendingChannelDefaultsReset = true;
+    } else if (channelConfigSelectedIdx == 0) {
+        // '...' selected, return to main menu
+        currentMenu = MAIN_MENU;
+    }
+}
+
+// STUTTER_LENGTH_MENU
+// Up: move selection up, update scroll index
+void MenuManager::stutterLengthMenuUp() {
+    if (stutterLengthSelectedIdx > stutterLengthScrollIdx) {
+        stutterLengthSelectedIdx--;
+    } else if (stutterLengthScrollIdx > 0) {
+        stutterLengthScrollIdx--;
+        stutterLengthSelectedIdx = stutterLengthScrollIdx;
+    }
+}
+// Down: move selection down, update scroll index
+void MenuManager::stutterLengthMenuDown() {
+    int lastVisibleIdx = stutterLengthScrollIdx + STUTTER_LENGTH_VISIBLE_OPTIONS - 1;
+    if (stutterLengthSelectedIdx < lastVisibleIdx && stutterLengthSelectedIdx < STUTTER_LENGTH_TOTAL_ITEMS - 1) {
+        stutterLengthSelectedIdx++;
+    } else if (lastVisibleIdx < STUTTER_LENGTH_TOTAL_ITEMS - 1) {
+        stutterLengthScrollIdx++;
+        stutterLengthSelectedIdx = stutterLengthScrollIdx + STUTTER_LENGTH_VISIBLE_OPTIONS - 1;
+    }
+}
+// Left: no action
+void MenuManager::stutterLengthMenuLeft() {
+    // No action
+}
+// Right: no action
+void MenuManager::stutterLengthMenuRight() {
+    // No action
+}
+// Select: apply changes or return to main menu
+void MenuManager::stutterLengthMenuSelect() {
+    if (stutterLengthSelectedIdx == 0) {
+        currentMenu = MAIN_MENU;
+    } else {
+        stutterLengthActiveIdx = stutterLengthSelectedIdx;
+        pulseResolution = STUTTER_LENGTH_PULSE_RESOLUTIONS[stutterLengthSelectedIdx - 1];
+        saveStutterLength(EEPROM_ADDR_STUTTER_LENGTH);
+    }
+}
+
+// OFFSET_MENU
+// Up: move selection up, update scroll index
+void MenuManager::offsetMenuUp() {
+    if (offsetSelectedIdx > offsetScrollIdx) {
+        offsetSelectedIdx--;
+    } else if (offsetScrollIdx > 0) {
+        offsetScrollIdx--;
+        offsetSelectedIdx = offsetScrollIdx;
+    }
+}
+// Down: move selection down, update scroll index
+void MenuManager::offsetMenuDown() {
+    int lastVisibleIdx = offsetScrollIdx + OFFSET_VISIBLE_OPTIONS - 1;
+    if (offsetSelectedIdx < lastVisibleIdx && offsetSelectedIdx < OFFSET_TOTAL_ITEMS - 1) {
+        offsetSelectedIdx++;
+    } else if (lastVisibleIdx < OFFSET_TOTAL_ITEMS - 1) {
+        offsetScrollIdx++;
+        offsetSelectedIdx = offsetScrollIdx + OFFSET_VISIBLE_OPTIONS - 1;
+    }
+}
+// Left: no action
+void MenuManager::offsetMenuLeft() {
+    // No action
+}
+// Right: no action
+void MenuManager::offsetMenuRight() {
+    // No action
+}
+// Select: apply changes or return to main menu
+void MenuManager::offsetMenuSelect() {
+    if (offsetSelectedIdx == 0) {
+        currentMenu = MAIN_MENU;
+    } else {
+        offsetActiveIdx = offsetSelectedIdx;
+        currentOffsetSet = &OFFSET_SETS[offsetSelectedIdx - 1];
+        saveOffset(EEPROM_ADDR_OFFSET);
+    }
+}
+
+// STUTTER_TEMPERATURE_MENU
+void MenuManager::stutterTemperatureMenuUp() {}
+void MenuManager::stutterTemperatureMenuDown() {}
+void MenuManager::stutterTemperatureMenuLeft() {}
+void MenuManager::stutterTemperatureMenuRight() {}
+void MenuManager::stutterTemperatureMenuSelect() {
+    currentMenu = MAIN_MENU;
+}
+
+// RETRIGGER_SYNTH_MENU
+// Up: move selection up
+void MenuManager::retriggerSynthMenuUp() {
+    if (retriggerSynthSelectedIdx > 0) retriggerSynthSelectedIdx--;
+}
+// Down: move selection down
+void MenuManager::retriggerSynthMenuDown() {
+    if (retriggerSynthSelectedIdx < 2) retriggerSynthSelectedIdx++;
+}
+// Left: no action
+void MenuManager::retriggerSynthMenuLeft() {
+    // No action
+}
+// Right: no action
+void MenuManager::retriggerSynthMenuRight() {
+    // No action
+}
+// Select: apply changes or return to main menu
+void MenuManager::retriggerSynthMenuSelect() {
+    if (retriggerSynthSelectedIdx == 0) {
+        currentMenu = MAIN_MENU;
+    } else if (retriggerSynthSelectedIdx == 1) {
+        retriggerSynths = true;
+        saveSynthRetrigger(EEPROM_ADDR_SYNTH_RETRIGGER);
+    } else if (retriggerSynthSelectedIdx == 2) {
+        retriggerSynths = false;
+        saveSynthRetrigger(EEPROM_ADDR_SYNTH_RETRIGGER);
+    }
+}
+
+// PITCHBEND_PROB_MENU
+void MenuManager::pitchbendProbMenuUp() {}
+void MenuManager::pitchbendProbMenuDown() {}
+void MenuManager::pitchbendProbMenuLeft() {}
+void MenuManager::pitchbendProbMenuRight() {}
+void MenuManager::pitchbendProbMenuSelect() {
+    currentMenu = MAIN_MENU;
+}
+
+// DELAY_TIMES_MENU (uses left/right)
+// Up: move selection up
+void MenuManager::delayTimesMenuUp() {
+    if (delayTimeSelectedIdx > 0) delayTimeSelectedIdx--;
+}
+// Down: move selection down
+void MenuManager::delayTimesMenuDown() {
+    if (delayTimeSelectedIdx < 2) delayTimeSelectedIdx++;
+}
+// Left: decrement value for min/max delay
+void MenuManager::delayTimesMenuLeft() {
+    if (delayTimeSelectedIdx == 1) {
+        if (minDelayTime >= 20) minDelayTime -= 100;
+        else minDelayTime = 0;
+    } else if (delayTimeSelectedIdx == 2) {
+        if (maxDelayTime >= 200) maxDelayTime -= 100;
+        else maxDelayTime = 0;
+    }
+}
+// Right: increment value for min/max delay
+void MenuManager::delayTimesMenuRight() {
+    if (delayTimeSelectedIdx == 1) {
+        minDelayTime += 100;
+        if (minDelayTime > maxDelayTime) minDelayTime = maxDelayTime;
+    } else if (delayTimeSelectedIdx == 2) {
+        maxDelayTime += 100;
+        if (maxDelayTime > 60000) maxDelayTime = 60000;
+    }
+}
+// Select: save and return to main menu if '...' is selected
+void MenuManager::delayTimesMenuSelect() {
+    if (delayTimeSelectedIdx == 0) {
+        saveMinDelayTime(EEPROM_ADDR_MIN_DELAY_TIME);
+        saveMaxDelayTime(EEPROM_ADDR_MAX_DELAY_TIME);
+        currentMenu = MAIN_MENU;
+    }
+    // else: do nothing for other selections
+}

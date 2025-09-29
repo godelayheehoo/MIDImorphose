@@ -3,6 +3,23 @@
 #include <Adafruit_ST7789.h>
 #include "EEPROMAddresses.h"
 
+class MenuManager;
+
+// Table-driven menu action handler types
+typedef void (MenuManager::*MenuActionHandler)();
+
+struct MenuHandlers {
+    MenuActionHandler onUp;
+    MenuActionHandler onDown;
+    MenuActionHandler onLeft;
+    MenuActionHandler onRight;
+    MenuActionHandler onSelect;
+};
+
+// Handler table declaration
+extern const MenuHandlers menuHandlersTable[];
+
+
 enum MenuState {
     MAIN_MENU,
     MENU_1,
@@ -91,6 +108,104 @@ public:
 
     void renderProbabilityMenu(const char* title, const String& inputBuffer);
 
+    // Handler functions for MENU_1
+    void menu1Up();
+    void menu1Down();
+    void menu1Left();
+    void menu1Right();
+    void menu1Select();
+
+    // Handler functions for MENU_2
+    void menu2Up();
+    void menu2Down();
+    void menu2Left();
+    void menu2Right();
+    void menu2Select();
+
+    // Handler functions for NOTE_JITTER_PROB_MENU
+    void noteJitterProbMenuUp();
+    void noteJitterProbMenuDown();
+    void noteJitterProbMenuLeft();
+    void noteJitterProbMenuRight();
+    void noteJitterProbMenuSelect();
+
+    // Handler functions for DRUM_JITTER_PROB_MENU
+    void drumJitterProbMenuUp();
+    void drumJitterProbMenuDown();
+    void drumJitterProbMenuLeft();
+    void drumJitterProbMenuRight();
+    void drumJitterProbMenuSelect();
+
+    // Handler functions for RETRIGGER_PROB_MENU
+    void retriggerProbMenuUp();
+    void retriggerProbMenuDown();
+    void retriggerProbMenuLeft();
+    void retriggerProbMenuRight();
+    void retriggerProbMenuSelect();
+
+    // Handler functions for RANDOM_DROP_PROB_MENU
+    void randomDropProbMenuUp();
+    void randomDropProbMenuDown();
+    void randomDropProbMenuLeft();
+    void randomDropProbMenuRight();
+    void randomDropProbMenuSelect();
+
+    // Handler functions for DELAY_NOTE_PROB_MENU
+    void delayNoteProbMenuUp();
+    void delayNoteProbMenuDown();
+    void delayNoteProbMenuLeft();
+    void delayNoteProbMenuRight();
+    void delayNoteProbMenuSelect();
+
+    // Handler functions for CHANNEL_CONFIG_MENU
+    void channelConfigMenuUp();
+    void channelConfigMenuDown();
+    void channelConfigMenuLeft();
+    void channelConfigMenuRight();
+    void channelConfigMenuSelect();
+
+    // Handler functions for STUTTER_LENGTH_MENU
+    void stutterLengthMenuUp();
+    void stutterLengthMenuDown();
+    void stutterLengthMenuLeft();
+    void stutterLengthMenuRight();
+    void stutterLengthMenuSelect();
+
+    // Handler functions for OFFSET_MENU
+    void offsetMenuUp();
+    void offsetMenuDown();
+    void offsetMenuLeft();
+    void offsetMenuRight();
+    void offsetMenuSelect();
+
+    // Handler functions for STUTTER_TEMPERATURE_MENU
+    void stutterTemperatureMenuUp();
+    void stutterTemperatureMenuDown();
+    void stutterTemperatureMenuLeft();
+    void stutterTemperatureMenuRight();
+    void stutterTemperatureMenuSelect();
+
+    // Handler functions for RETRIGGER_SYNTH_MENU
+    void retriggerSynthMenuUp();
+    void retriggerSynthMenuDown();
+    void retriggerSynthMenuLeft();
+    void retriggerSynthMenuRight();
+    void retriggerSynthMenuSelect();
+
+    // Handler functions for PITCHBEND_PROB_MENU
+    void pitchbendProbMenuUp();
+    void pitchbendProbMenuDown();
+    void pitchbendProbMenuLeft();
+    void pitchbendProbMenuRight();
+    void pitchbendProbMenuSelect();
+
+    // Handler functions for DELAY_TIMES_MENU (uses left/right)
+    void delayTimesMenuUp();
+    void delayTimesMenuDown();
+    void delayTimesMenuLeft();
+    void delayTimesMenuRight();
+    void delayTimesMenuSelect();
+
     MenuState currentMenu;
     // Flag for requesting channel defaults reset
     bool pendingChannelDefaultsReset = false;
@@ -173,4 +288,13 @@ public:
     unsigned int minDelayTime = 500;
     unsigned int maxDelayTime = 4000;
     byte delayTimeSelectedIdx = 0; // 0 = '...', 1 = left, 2 = right
+
+    bool pendingSynthChannelUpdate = false;
+    bool pendingDrumChannelUpdate = false;
+
+    void mainMenuUp();
+    void mainMenuDown();
+    void mainMenuLeft();
+    void mainMenuRight();
+    void mainMenuSelect();
 };

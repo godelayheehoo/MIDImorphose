@@ -991,8 +991,6 @@ void playDelayedNotes();
 void showVelocityCoercionLabel();
 
 // --- State variables for pending updates ---
-bool pendingDrumChannelUpdate = false;
-bool pendingSynthChannelUpdate = false;
 
 void setup() {
   // put your setup code here, to run once:
@@ -1530,15 +1528,15 @@ if(velocityCoercionSwitch.update()){
   stutterButtonPressed = readStutterButton();
   
 
-  if(pendingDrumChannelUpdate){
+  if(menu.pendingDrumChannelUpdate){
     Serial.println(F("Drum button pressed!"));
     updateDrumSwitches();
-    pendingDrumChannelUpdate=false;
+    menu.pendingDrumChannelUpdate=false;
   }
-  if(pendingSynthChannelUpdate){
+  if(menu.pendingSynthChannelUpdate){
     Serial.println(F("Synth button pressed!"));
     updateSynthSwitches();
-    pendingSynthChannelUpdate=false;
+    menu.pendingSynthChannelUpdate=false;
   }
 
   // Handle menu-driven reset to default for channel config
