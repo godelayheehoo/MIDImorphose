@@ -89,6 +89,8 @@ public:
     int eepromAddr
 );
 
+    void renderProbabilityMenu(const char* title, const String& inputBuffer);
+
     MenuState currentMenu;
     // Flag for requesting channel defaults reset
     bool pendingChannelDefaultsReset = false;
