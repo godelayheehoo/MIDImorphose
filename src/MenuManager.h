@@ -79,7 +79,16 @@ public:
     void handleRandomDropProbKeypad(char key); // For RANDOM_DROP_PROB_MENU
     void handleStutterTemperatureKeypad(char key); // For STUTTER_TEMPERATURE_MENU
     void handleDelayNoteProbKeypad(char key); // For DELAY_NOTE_PROB_MENU
-    void handlePitchbendProbKeypad(char key); // For PITCHBEND_PROB_MENU
+    void handlePitchbendProbKeypad(char key); // For 
+    
+    void handleProbKeypad(
+    MenuState expectedMenu,
+    char key,
+    String& inputBuffer,
+    byte& probVar,
+    int eepromAddr
+);
+
     MenuState currentMenu;
     // Flag for requesting channel defaults reset
     bool pendingChannelDefaultsReset = false;

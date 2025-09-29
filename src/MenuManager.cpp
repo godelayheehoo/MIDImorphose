@@ -420,70 +420,29 @@ void MenuManager::handleInput(MenuButton btn) {
     }
 }
 
-// Call this from loop() when in NOTE_JITTER_PROB_MENU
+//standard probability menu handling
 void MenuManager::handleJitterKeypad(char key) {
-    if (currentMenu != NOTE_JITTER_PROB_MENU) return;
-    static bool inputLocked = false;
-    if (key == '*') {
-        jitterInputBuffer = "";
-        inputLocked = false;
-    } else if (key == '#') {
-        int val = jitterInputBuffer.toInt();
-        if (val > 100) val = 100;
-        noteJitterProb = val;
-        saveNoteJitterProb(EEPROM_ADDR_JITTER_PROB);
-        jitterInputBuffer = String(val); // Show clamped value
-        inputLocked = true;
-    } else if (key >= '0' && key <= '9') {
-        if (!inputLocked && jitterInputBuffer.length() < 3) {
-            jitterInputBuffer += key;
-        }
-    }
-    // Ignore other keys
+    handleProbKeypad(NOTE_JITTER_PROB_MENU, key, jitterInputBuffer, noteJitterProb, EEPROM_ADDR_JITTER_PROB);
 }
-
 void MenuManager::handleDrumJitterKeypad(char key) {
-    if (currentMenu != DRUM_JITTER_PROB_MENU) return;
-    static bool inputLocked = false;
-    if (key == '*') {
-        drumJitterInputBuffer = "";
-        inputLocked = false;
-    } else if (key == '#') {
-        int val = drumJitterInputBuffer.toInt();
-        if (val > 100) val = 100;
-        drumJitterProb = val;
-        saveDrumJitterProb(EEPROM_ADDR_DRUM_JITTER_PROB);
-        drumJitterInputBuffer = String(val); // Show clamped value
-        inputLocked = true;
-    } else if (key >= '0' && key <= '9') {
-        if (!inputLocked && drumJitterInputBuffer.length() < 3) {
-            drumJitterInputBuffer += key;
-        }
-    }
-    // Ignore other keys
+    handleProbKeypad(DRUM_JITTER_PROB_MENU, key, drumJitterInputBuffer, drumJitterProb, EEPROM_ADDR_DRUM_JITTER_PROB);
 }
 
-// Call this from loop() when in RETRIGGER_PROB_MENU
 void MenuManager::handleRetriggerKeypad(char key) {
-    if (currentMenu != RETRIGGER_PROB_MENU) return;
-    static bool inputLocked = false;
-    if (key == '*') {
-        retriggerInputBuffer = "";
-        inputLocked = false;
-    } else if (key == '#') {
-        int val = retriggerInputBuffer.toInt();
-        if (val > 100) val = 100;
-        retriggerProb = val;
-        saveRetriggerProb(EEPROM_ADDR_RETRIGGER_PROB);
-        retriggerInputBuffer = String(val); // Show clamped value
-        inputLocked = true;
-    } else if (key >= '0' && key <= '9') {
-        if (!inputLocked && retriggerInputBuffer.length() < 3) {
-            retriggerInputBuffer += key;
-        }
-    }
-    // Ignore other keys
+    handleProbKeypad(RETRIGGER_PROB_MENU, key, retriggerInputBuffer, retriggerProb, EEPROM_ADDR_RETRIGGER_PROB);
 }
+
+void MenuManager::handleRandomDropProbKeypad(char key){
+    handleProbKeypad(RANDOM_DROP_PROB_MENU, key, randomDropInputBuffer, randomDropProb, EEPROM_ADDR_RANDOM_DROP_PROB);
+}
+
+void MenuManager::handleDelayNoteProbKeypad(char key){
+    handleProbKeypad(DELAY_NOTE_PROB_MENU,key,delayNoteInputBuffer,delayNoteProb,EEPROM_ADDR_DELAY_NOTE_PROB);
+}
+
+
+
+///special keypad handling
 
 // Call this from loop() when in STUTTER_TEMPERATURE_MENU
 void MenuManager::handleStutterTemperatureKeypad(char key) {
@@ -501,51 +460,6 @@ void MenuManager::handleStutterTemperatureKeypad(char key) {
     } else if (key >= '0' && key <= '9') {
         if (!inputLocked && stutterTemperatureInputBuffer.length() < 3) {
             stutterTemperatureInputBuffer += key;
-        }
-    }
-    // Ignore other keys
-}
-
-// Call this from loop() when in RANDOM_DROP_PROB_MENU
-void MenuManager::handleRandomDropProbKeypad(char key) {
-    if (currentMenu != RANDOM_DROP_PROB_MENU) return;
-    static bool inputLocked = false;
-    if (key == '*') {
-        randomDropInputBuffer = "";
-        inputLocked = false;
-    } else if (key == '#') {
-        int val = randomDropInputBuffer.toInt();
-        if (val > 100) val = 100;
-        Serial.println("Setting randomDropProb to " + String(val));
-        randomDropProb = val;
-        saveRandomDropProb(EEPROM_ADDR_RANDOM_DROP_PROB);
-        randomDropInputBuffer = String(val); // Show clamped value
-        inputLocked = true;
-    } else if (key >= '0' && key <= '9') {
-        if (!inputLocked && randomDropInputBuffer.length() < 3) {
-            randomDropInputBuffer += key;
-        }
-    }
-    // Ignore other keys
-}
-
-// Call this from loop() when in DELAY_NOTE_PROB_MENU
-void MenuManager::handleDelayNoteProbKeypad(char key) {
-    if (currentMenu != DELAY_NOTE_PROB_MENU) return;
-    static bool inputLocked = false;
-    if (key == '*') {
-        delayNoteInputBuffer = "";
-        inputLocked = false;
-    } else if (key == '#') {
-        int val = delayNoteInputBuffer.toInt();
-        if (val > 100) val = 100;
-        delayNoteProb = val;
-        saveDelayNoteProb(EEPROM_ADDR_DELAY_NOTE_PROB);
-        delayNoteInputBuffer = String(val); // Show clamped value
-        inputLocked = true;
-    } else if (key >= '0' && key <= '9') {
-        if (!inputLocked && delayNoteInputBuffer.length() < 3) {
-            delayNoteInputBuffer += key;
         }
     }
     // Ignore other keys
@@ -1121,3 +1035,42 @@ else{
     tft.print("you must exit to save");
     }
 }
+
+
+//////// abstracted functions
+
+// Remove the saveFunc parameter and call the member function directly
+void MenuManager::handleProbKeypad(
+    MenuState expectedMenu,
+    char key,
+    String& inputBuffer,
+    byte& probVar,
+    int eepromAddr
+) {
+    if (currentMenu != expectedMenu) return;
+    static bool inputLocked = false;
+    if (key == '*') {
+        inputBuffer = "";
+        inputLocked = false;
+    } else if (key == '#') {
+        int val = inputBuffer.toInt();
+        if (val > 100) val = 100;
+        probVar = val;
+        // Call the member function directly
+        if (expectedMenu == NOTE_JITTER_PROB_MENU) saveNoteJitterProb(eepromAddr);
+        else if (expectedMenu == DRUM_JITTER_PROB_MENU) saveDrumJitterProb(eepromAddr);
+        else if (expectedMenu == RETRIGGER_PROB_MENU) saveRetriggerProb(eepromAddr);
+        else if (expectedMenu == RANDOM_DROP_PROB_MENU) saveRandomDropProb(eepromAddr);
+        else if (expectedMenu == DELAY_NOTE_PROB_MENU) saveDelayNoteProb(eepromAddr);
+        // ...add other cases as needed...
+        else{Serial.println("Unexpected menu handling, no save function set!");}
+        inputBuffer = String(val); // Show clamped value
+        inputLocked = true;
+    } else if (key >= '0' && key <= '9') {
+        if (!inputLocked && inputBuffer.length() < 3) {
+            inputBuffer += key;
+        }
+    }
+    // Ignore other keys
+}
+
