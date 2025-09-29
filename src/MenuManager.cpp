@@ -565,7 +565,7 @@ void MenuManager::handlePitchbendProbKeypad(char key) {
         pitchbendProbInputBuffer = String(val); // Show clamped value
         inputLocked = true;
     } else if (key >= '0' && key <= '9') {
-        if (!inputLocked && pitchbendProbInputBuffer.length() < 3) {
+        if (!inputLocked && pitchbendProbInputBuffer.length() < 6) {
             pitchbendProbInputBuffer += key;
         }
     }

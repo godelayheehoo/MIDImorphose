@@ -103,6 +103,13 @@ channel to off and updating.  There's nuance here though-- the stuttered notes w
 //should I also reset on new switch activations so it's possible to get "off"?
 
 //instead of cycling, should I have the groove selectable via menu?
+
+//set retrigger synth time and maybe reretrigger prob?
+//reorganize menus, order and maybe even sub menus
+//synth swapping-- any active synth channel? If incorporated into jitter, you'd have to change the jitter tracking
+//I don't want to add another button-- also basically impossible at this point.
+//non-null defaults?
+//then maybe add an "everything off" menu option in addition to reset defaults?
 #include "NoteStructs.h"
 #include "SortedBuffer.h"
 #include "MidiUtils.h"
@@ -1415,6 +1422,11 @@ void loop() {
     reverseMidiBuffer(stutterBuffer);
     keypad.lastKeyPressed = 0;
   }
+  if (keypad.lastKeyPressed == 'D'){
+    menu.currentMenu = MAIN_MENU;
+    menu.render();
+    keypad.lastKeyPressed = 0;
+  }
   // Handle keypad input for menus using a switch statement
   if (keypad.lastKeyPressed) {
     switch (menu.currentMenu) {
@@ -1585,14 +1597,20 @@ if (panicButton.update()) {
     midiPanic();
 #ifdef DEBUG
     Serial.println(F("Panic!"));
+    Serial.println("Attempting to recoever tft...");
+    SPI.end();            // tear down SPI
+    delay(10);
+    SPI.begin();          // reinit SPI
+    menuTft.init(240, 320); // reinit display
 #endif
-
     // Start temporary view
     tempViewCallback = showPanicDisplay;
     tempViewStartTime = millis();
     tempViewActive = true;
 
     tempViewCallback();  // draw it immediately
+
+
 }
 
 
