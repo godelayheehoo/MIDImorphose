@@ -94,7 +94,7 @@ void MenuManager::saveMaxDelayTime(int eepromAddr){
 }
 
 MenuManager::MenuManager(Adafruit_ST7789& display) : tft(display), currentMenu(MAIN_MENU) {
-    currentOffsetSet = &OFFSET_SETS[0]; // Default to No Offset
+    currentOffsetSet = &OFFSET_SETS[2]; // Default to Major Offset
 }
 
 

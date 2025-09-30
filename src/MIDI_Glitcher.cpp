@@ -900,7 +900,7 @@ void restoreDefaults() {
     }
     // Set menu defaults
   menu.stutterLengthActiveIdx = 9; // 1/4 note
-  menu.offsetActiveIdx = 1; // Any Offset
+  menu.offsetActiveIdx = 3; // Major Offset
   menu.noteJitterProb = 10;
   menu.drumJitterProb = 10;
   menu.retriggerProb = 10;
@@ -945,7 +945,7 @@ void disableAll() {
     }
     // Set menu defaults
   menu.stutterLengthActiveIdx = 9; // 1/4 note
-  menu.offsetActiveIdx = 1; // Any Offset
+  menu.offsetActiveIdx = 0; // No Offset
   menu.noteJitterProb = 0;
   menu.drumJitterProb = 0;
   menu.retriggerProb = 0;

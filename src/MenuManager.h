@@ -41,19 +41,45 @@ struct OffsetSet {
     size_t size;
 };
 static byte NO_OFFSETS[1] = {0};
-static byte ANY_OFFSETS[12] = {0,1,2,3,4,5,6,7,8,9,10,11};
+static byte ANY_OFFSETS[11] = {1,2,3,4,5,6,7,8,9,10,11};
 static byte MAJOR_OFFSETS[6] = {2, 4, 5, 7, 9, 11};
-static byte BRETT_OFFSETS[3] = {7, 14, 21};
-static OffsetSet OFFSET_SETS[4] = {
+static byte MINOR_OFFSETS[6] = {2, 3, 5, 7, 8, 10};
+static byte HARMONIC_MINOR_OFFSETS[6] = {2, 3, 5, 7, 8, 11};
+static byte MELODIC_MINOR_OFFSETS[6] = {2, 3, 5, 7, 9, 11};
+static byte PENTATONIC_MAJOR_OFFSETS[4] = {2, 4, 7, 9};
+static byte PENTATONIC_MINOR_OFFSETS[4] = {3, 5, 7, 10};
+static byte BLUES_OFFSETS[5] = {3, 5, 6, 7, 10};
+static byte DORIAN_OFFSETS[6] = {2, 3, 5, 7, 9, 10};
+static byte MIXOLYDIAN_OFFSETS[6] = {2, 4, 5, 7, 9, 10};
+static byte BRETT_OFFSETS[3] = {7, 14, 21}; //stacking fifths
+static byte FOURTHS_OFFSETS[3] = {5, 10, 15}; // stacked fourths
+static byte WHOLE_TONE_OFFSETS[5] = {2, 4, 6, 8, 10}; // whole tone scale
+static byte AUGMENTED_OFFSETS[3] = {3, 6, 9};         // minor 3rds stacked
+static byte SPARSE_TRIAD_OFFSETS[2] = {3, 7};  // minor third + perfect fifth
+static byte MAJOR_TRIAD_OFFSETS[2] = {4, 7};   // major triad
+static OffsetSet OFFSET_SETS[17] = {
     {NO_OFFSETS, 1},
-    {ANY_OFFSETS, 12},
+    {ANY_OFFSETS, 11},
     {MAJOR_OFFSETS, 6},
-    {BRETT_OFFSETS, 3}
+    {MINOR_OFFSETS, 6},
+    {HARMONIC_MINOR_OFFSETS, 6},
+    {MELODIC_MINOR_OFFSETS, 6},
+    {PENTATONIC_MAJOR_OFFSETS, 4},
+    {PENTATONIC_MINOR_OFFSETS, 4},
+    {BLUES_OFFSETS, 5},
+    {DORIAN_OFFSETS, 6},
+    {MIXOLYDIAN_OFFSETS, 6},
+    {BRETT_OFFSETS, 3},
+    {FOURTHS_OFFSETS, 3},
+    {WHOLE_TONE_OFFSETS, 5},
+    {AUGMENTED_OFFSETS, 3},
+    {SPARSE_TRIAD_OFFSETS, 2},
+    {MAJOR_TRIAD_OFFSETS, 2}
 };
-static const char* OFFSET_LABELS[4] = {
-    "No Offset", "Any Offset", "Major", "Brett"
+static const char* OFFSET_LABELS[17] = {
+    "No Offset", "Any Offset", "Major", "Minor", "Harmonic Minor", "Melodic Minor", "Pentatonic Major", "Pentatonic Minor", "Blues", "Dorian", "Mixolydian", "Brett", "Fourths", "Whole Tone", "Augmented", "Sparse Triad", "Major Triad"
 };
-const int NUM_OFFSET_OPTIONS = 4;
+const int NUM_OFFSET_OPTIONS = 17;
 const int OFFSET_TOTAL_ITEMS = NUM_OFFSET_OPTIONS + 1; // 1 for '...', rest for options
 // Stutter length menu options (pulse resolutions and labels)
 const int NUM_STUTTER_LENGTH_OPTIONS = 16;
