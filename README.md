@@ -125,7 +125,27 @@ The TFT display provides a visual menu system for configuration and navigation. 
   - Select from 16 different pulse resolutions (e.g., 1/32 note, 1/16 triplet, 1/4 note, etc.).
 
 - **Offset/Scale Menu:**
-  - Select from offset sets: No Offset, Any Offset, Major, Brett.
+  - Select from offset sets:
+
+| Name | Offsets (semitones) | Description |
+|------|-------------------|-------------|
+| No Offset | 0 | No pitch modification |
+| Any Offset | 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11 | All chromatic notes |
+| Major | 2, 4, 5, 7, 9, 11 | Major scale |
+| Minor | 2, 3, 5, 7, 8, 10 | Natural minor scale |
+| Harmonic Minor | 2, 3, 5, 7, 8, 11 | Harmonic minor scale |
+| Melodic Minor | 2, 3, 5, 7, 9, 11 | Melodic minor scale |
+| Pentatonic Major | 2, 4, 7, 9 | Major pentatonic scale |
+| Pentatonic Minor | 3, 5, 7, 10 | Minor pentatonic scale |
+| Blues | 3, 5, 6, 7, 10 | Blues scale |
+| Dorian | 2, 3, 5, 7, 9, 10 | Dorian mode |
+| Mixolydian | 2, 4, 5, 7, 9, 10 | Mixolydian mode |
+| Brett | 7, 14, 21 | Stacked fifths |
+| Fourths | 5, 10, 15 | Stacked fourths |
+| Whole Tone | 2, 4, 6, 8, 10 | Whole tone scale |
+| Augmented | 3, 6, 9 | Minor thirds stacked |
+| Sparse Triad | 3, 7 | Minor third + perfect fifth |
+| Major Triad | 4, 7 | Major triad |
 
 - **Retrigger Synth Menu:**
   - Enable or disable retriggering for synths.
