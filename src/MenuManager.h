@@ -22,8 +22,6 @@ extern const MenuHandlers menuHandlersTable[];
 
 enum MenuState {
     MAIN_MENU,
-    MENU_1,
-    MENU_2,
     NOTE_JITTER_PROB_MENU,
     DRUM_JITTER_PROB_MENU,
     RETRIGGER_PROB_MENU,
@@ -78,13 +76,7 @@ enum MenuButton {
 };
 
 
-const int NUM_MENU1_OPTIONS = 4;
-const int MENU1_TOTAL_ITEMS = NUM_MENU1_OPTIONS + 1; // 1 for title, 4 for options
 
-const int NUM_MENUB_OPTIONS = 6;
-const int MENUB_TOTAL_ITEMS = NUM_MENUB_OPTIONS + 1; // 1 for title, 6 for options
-
-const int MAIN_MENU_ITEMS = 2; // Menu 1 and Menu B
 class MenuManager {
 public:
     MenuManager(Adafruit_ST7789& display);
@@ -107,20 +99,6 @@ public:
 );
 
     void renderProbabilityMenu(const char* title, const String& inputBuffer);
-
-    // Handler functions for MENU_1
-    void menu1Up();
-    void menu1Down();
-    void menu1Left();
-    void menu1Right();
-    void menu1Select();
-
-    // Handler functions for MENU_2
-    void menu2Up();
-    void menu2Down();
-    void menu2Left();
-    void menu2Right();
-    void menu2Select();
 
     // Handler functions for NOTE_JITTER_PROB_MENU
     void noteJitterProbMenuUp();
@@ -214,8 +192,7 @@ public:
     // Save functions for each menu setting
     void saveStutterLength(int eepromAddr);
     void saveOffset(int eepromAddr);
-    void saveMenu1(int eepromAddr);
-    void saveMenuB(int eepromAddr);
+
     void saveNoteJitterProb(int eepromAddr);
     void saveDrumJitterProb(int eepromAddr);
     void saveRetriggerProb(int eepromAddr);
@@ -242,16 +219,8 @@ public:
     static const int RETRIGGER_SYNTH_TOTAL_ITEMS = 3;
     // Retrigger synths enabled/disabled
     bool retriggerSynths = false;
-    // Menu 1 selection
-    int menu1SelectedIdx = 0; // 0 = '...', 1-4 = options
-    int menu1ScrollIdx = 0; // index of first visible option (0 = '...', 1 = Option 1, ...)
-    static const int MENU1_VISIBLE_OPTIONS = 4; // number of options visible at once
-    int menu1ActiveIdx = 1; // Active option, initially Option 1 (index 1)
-    // Menu B selection
-    int menuBSelectedIdx = 0; // 0 = '...', 1-6 = options
-    int menuBScrollIdx = 0;
-    static const int MENUB_VISIBLE_OPTIONS = 4;
-    int menuBActiveIdx = 1; // Active option, initially Option A (index 1)
+
+
     // Note Jitter Prob menu
     String jitterInputBuffer = "";
     byte noteJitterProb = 0;

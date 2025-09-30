@@ -136,6 +136,9 @@ The TFT display provides a visual menu system for configuration and navigation. 
 - **Restore Defaults:**
   - Resets all menu-configurable settings to their default values.
 
+- **Disable All**
+  - Sets all probabilities to 0 and disables optional functions.
+
 **Navigation:**
 - Use the control pad/buttons to move between menu items and select options.
   - Up/Down: Move selection
@@ -147,11 +150,14 @@ The TFT display provides a visual menu system for configuration and navigation. 
 
 All menu selections and settings are saved to EEPROM for persistence across power cycles. See the code for detailed menu logic and available options.
 
+- Press 'A' to approximately reverse playback when stuttering.
+- Press 'D' to return to main menu when on a different menu.
+
 ## Code Structure
 
 - `src/MIDI_Glitcher.cpp`: Main application logic, event buffering, timing, display, and user input.
 - `src/MenuManager.h/cpp`: Menu system logic, state management, rendering, and input handling.
-- `src/Tempo_Tracker.h/cpp`: Tracks MIDI clock pulses and calculates BPM.
+- `src/Tempo_Tracker.h/cpp`: Tracks MIDI clock pulses and calculates BPM.  Note tempo tracking isn't actually used right now. 
 - `lib/`: Custom and third-party libraries (e.g., CircularBuffer, TM1637).
 - `include/`: Project-wide headers.
 

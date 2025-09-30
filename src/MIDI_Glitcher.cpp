@@ -889,7 +889,7 @@ void handleClock() {
 void restoreDefaults() {
   // Drum defaults: false, false, false, false, false, false, false, false, false, true, true, false, false, false, false, false
     bool drumDefaults[16] = {false, false, false, false, false, false, false, false, true, true, true, false, false, false, false, false};
-    bool synthDefaults[16] = {true, true, true, true, true, true, true, true, false, false, false, false, true, true, true, true};
+    bool synthDefaults[16] = {true, true, true, true, true, true, true, true, false, false, false, true, true, true, true, true};
     drumState = 0;
     synthState = 0;
     for (int i = 0; i < 16; i++) {
@@ -901,8 +901,6 @@ void restoreDefaults() {
     // Set menu defaults
   menu.stutterLengthActiveIdx = 9; // 1/4 note
   menu.offsetActiveIdx = 1; // Any Offset
-  menu.menu1ActiveIdx = 1;
-  menu.menuBActiveIdx = 1;
   menu.noteJitterProb = 10;
   menu.drumJitterProb = 10;
   menu.retriggerProb = 10;
@@ -919,8 +917,6 @@ void restoreDefaults() {
     EEPROM.put(EEPROM_ADDR_SYNTH_STATE, synthState);
   menu.saveStutterLength(EEPROM_ADDR_STUTTER_LENGTH);
   menu.saveOffset(EEPROM_ADDR_OFFSET);
-  menu.saveMenu1(EEPROM_ADDR_MENU1);
-  menu.saveMenuB(EEPROM_ADDR_MENUB);
   menu.saveNoteJitterProb(EEPROM_ADDR_JITTER_PROB);
   menu.saveDrumJitterProb(EEPROM_ADDR_DRUM_JITTER_PROB);
   menu.saveRetriggerProb(EEPROM_ADDR_RETRIGGER_PROB);
@@ -950,8 +946,6 @@ void disableAll() {
     // Set menu defaults
   menu.stutterLengthActiveIdx = 9; // 1/4 note
   menu.offsetActiveIdx = 1; // Any Offset
-  menu.menu1ActiveIdx = 1;
-  menu.menuBActiveIdx = 1;
   menu.noteJitterProb = 0;
   menu.drumJitterProb = 0;
   menu.retriggerProb = 0;
@@ -968,8 +962,6 @@ void disableAll() {
     EEPROM.put(EEPROM_ADDR_SYNTH_STATE, synthState);
   menu.saveStutterLength(EEPROM_ADDR_STUTTER_LENGTH);
   menu.saveOffset(EEPROM_ADDR_OFFSET);
-  menu.saveMenu1(EEPROM_ADDR_MENU1);
-  menu.saveMenuB(EEPROM_ADDR_MENUB);
   menu.saveNoteJitterProb(EEPROM_ADDR_JITTER_PROB);
   menu.saveDrumJitterProb(EEPROM_ADDR_DRUM_JITTER_PROB);
   menu.saveRetriggerProb(EEPROM_ADDR_RETRIGGER_PROB);
@@ -1157,8 +1149,6 @@ void setup() {
   // Load menu settings from fixed addresses
   menu.stutterLengthActiveIdx = EEPROM.read(EEPROM_ADDR_STUTTER_LENGTH);
   menu.offsetActiveIdx = EEPROM.read(EEPROM_ADDR_OFFSET);
-  menu.menu1ActiveIdx = EEPROM.read(EEPROM_ADDR_MENU1);
-  menu.menuBActiveIdx = EEPROM.read(EEPROM_ADDR_MENUB);
   menu.noteJitterProb = EEPROM.read(EEPROM_ADDR_JITTER_PROB);
   menu.drumJitterProb = EEPROM.read(EEPROM_ADDR_DRUM_JITTER_PROB);
   menu.retriggerProb = EEPROM.read(EEPROM_ADDR_RETRIGGER_PROB);
@@ -1199,8 +1189,6 @@ void setup() {
   // EEPROM.put(EEPROM_ADDR_SYNTH_STATE, synthState);
   // EEPROM.write(EEPROM_ADDR_STUTTER_LENGTH, menu.stutterLengthActiveIdx);
   // EEPROM.write(EEPROM_ADDR_OFFSET, menu.offsetActiveIdx);
-  // EEPROM.write(EEPROM_ADDR_MENU1, menu.menu1ActiveIdx);
-  // EEPROM.write(EEPROM_ADDR_MENUB, menu.menuBActiveIdx);
   // EEPROM.write(EEPROM_ADDR_JITTER_PROB, menu.noteJitterProb);
   // EEPROM.write(EEPROM_ADDR_RETRIGGER_PROB, menu.retriggerProb);
  
@@ -1597,7 +1585,7 @@ if(velocityCoercionSwitch.update()){
     Serial.println(F("Resetting channel config to defaults!"));
     // Drum defaults: false, false, false, false, false, false, false, false, false, true, true, false, false, false, false, false
     bool drumDefaults[16] = {false, false, false, false, false, false, false, false, true, true, true, false, false, false, false, false};
-    bool synthDefaults[16] = {true, true, true, true, true, true, true, true, false, false, false, false, true, true, true, true};
+    bool synthDefaults[16] = {true, true, true, true, true, true, true, true, false, false, false, true, true, true, true, true};
     drumState = 0;
     synthState = 0;
     for (int i = 0; i < 16; i++) {
@@ -1652,7 +1640,25 @@ if (panicButton.update()) {
     SPI.end();            // tear down SPI
     delay(10);
     SPI.begin();          // reinit SPI
-    menuTft.init(240, 320); // reinit display
+    menuTft.init(135, 240);   // correct for 240x135 ST7789
+    menuTft.setRotation(3);   // landscape
+    menuTft.fillScreen(ST77XX_BLACK);
+
+    menuTft.setTextColor(ST77XX_CYAN);
+    menuTft.setCursor(10, 10);
+    menuTft.setTextSize(2);
+    menuTft.print(F("MIDI Glitcher"));
+    menuTft.setCursor(15,25);
+    menuTft.setTextColor(ST77XX_MAGENTA);
+    menuTft.print(F("MIDI Glitcher"));
+    menuTft.setCursor(20,40);
+    menuTft.setTextColor(ST77XX_YELLOW);
+    menuTft.print(F("MIDI Glitcher"));
+    //print "press select to start" in bottom right corner
+    menuTft.setCursor(135-24, 135-16);
+    menuTft.setTextColor(ST77XX_WHITE);
+    menuTft.setTextSize(1);
+    menuTft.print(F("Press Select to Start"));
 #endif
     // Start temporary view
     tempViewCallback = showPanicDisplay;

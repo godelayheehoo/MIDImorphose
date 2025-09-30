@@ -6,8 +6,6 @@
 
 const MenuHandlers menuHandlersTable[] = {
     { &MenuManager::mainMenuUp, &MenuManager::mainMenuDown, &MenuManager::mainMenuLeft, &MenuManager::mainMenuRight, &MenuManager::mainMenuSelect }, // MAIN_MENU
-    { &MenuManager::menu1Up, &MenuManager::menu1Down, &MenuManager::menu1Left, &MenuManager::menu1Right, &MenuManager::menu1Select },               // MENU_1
-    { &MenuManager::menu2Up, &MenuManager::menu2Down, &MenuManager::menu2Left, &MenuManager::menu2Right, &MenuManager::menu2Select },                // MENU_2
     { &MenuManager::noteJitterProbMenuUp, &MenuManager::noteJitterProbMenuDown, &MenuManager::noteJitterProbMenuLeft, &MenuManager::noteJitterProbMenuRight, &MenuManager::noteJitterProbMenuSelect }, // NOTE_JITTER_PROB_MENU
     { &MenuManager::drumJitterProbMenuUp, &MenuManager::drumJitterProbMenuDown, &MenuManager::drumJitterProbMenuLeft, &MenuManager::drumJitterProbMenuRight, &MenuManager::drumJitterProbMenuSelect }, // DRUM_JITTER_PROB_MENU
     { &MenuManager::retriggerProbMenuUp, &MenuManager::retriggerProbMenuDown, &MenuManager::retriggerProbMenuLeft, &MenuManager::retriggerProbMenuRight, &MenuManager::retriggerProbMenuSelect }, // RETRIGGER_PROB_MENU
@@ -30,16 +28,6 @@ void MenuManager::saveStutterLength(int eepromAddr) {
 void MenuManager::saveOffset(int eepromAddr) {
     EEPROM.write(EEPROM_ADDR_MAGIC, EEPROM_MAGIC);
     EEPROM.write(eepromAddr, offsetActiveIdx);
-}
-
-void MenuManager::saveMenu1(int eepromAddr) {
-    EEPROM.write(EEPROM_ADDR_MAGIC, EEPROM_MAGIC);
-    EEPROM.write(eepromAddr, menu1ActiveIdx);
-}
-
-void MenuManager::saveMenuB(int eepromAddr) {
-    EEPROM.write(EEPROM_ADDR_MAGIC, EEPROM_MAGIC);
-    EEPROM.write(eepromAddr, menuBActiveIdx);
 }
 
 void MenuManager::saveNoteJitterProb(int eepromAddr) {
@@ -210,7 +198,7 @@ void MenuManager::render() {
     if (currentMenu == MAIN_MENU) {
     // Main menu: list of menus
     // Add ptchbnd ~prob before Restore Defaults, and add Disable All as last item
-    const char* menus[16] = {"Menu 1", "Menu 2", "Note Jitter Prob", "Drum Jitter Prob", "Retrigger Prob", "Random Drop Prob", "Delay Note Prob", "StutterTemperature", "Channel Config", "Stutter Length", "Offset/Scale", "Retrigger Synth", "ptchbnd ~prob","delay times", "Restore Defaults", "Disable All"};
+    const char* menus[14] = {"Note Jitter Prob", "Offset/Scale", "Drum Jitter Prob", "Retrigger Prob", "Retrigger Synth", "Random Drop Prob", "Delay Note Prob", "Stutter Length", "StutterTemperature", "delay times", "ptchbnd ~prob", "Channel Config", "Restore Defaults", "Disable All"};
         int yStart = 10;
         tft.setTextSize(2);
         tft.setCursor(10, yStart);
@@ -220,7 +208,7 @@ void MenuManager::render() {
         // Main menu labels
         int itemIdx = mainMenuScrollIdx;
         int y = yStart;
-    for (int visible = 0; visible < MAIN_MENU_VISIBLE_ITEMS && itemIdx < 16; ++visible, ++itemIdx) {
+    for (int visible = 0; visible < MAIN_MENU_VISIBLE_ITEMS && itemIdx < 14; ++visible, ++itemIdx) {
             tft.setCursor(20, y + 30);
             if (mainMenuSelectedIdx == itemIdx) {
                 tft.setTextColor(ST77XX_BLACK, ST77XX_WHITE);
@@ -402,74 +390,8 @@ void MenuManager::render() {
             tft.print(options[i]);
         }
         tft.setTextColor(ST77XX_WHITE);
-    } else if (currentMenu == MENU_1) {
-        // Draw title and options, highlight selected, scroll if needed
-        const char* options[NUM_MENU1_OPTIONS] = {"Option 1", "Option 2", "Option 3", "Option 4"};
-        int yStart = 10;
-        int itemIdx = menu1ScrollIdx;
-        int y = yStart;
-        tft.fillScreen(ST77XX_BLACK);
-        for (int visible = 0; visible < MENU1_VISIBLE_OPTIONS && itemIdx < MENU1_TOTAL_ITEMS; ++visible, ++itemIdx) {
-            int squareX = 10;
-            int squareY = y + 6;
-            int squareSize = 12;
-            if (itemIdx != 0) {
-                if (itemIdx == menu1ActiveIdx) {
-                    tft.fillRect(squareX, squareY, squareSize, squareSize, ST77XX_MAGENTA);
-                } else {
-                    tft.drawRect(squareX, squareY, squareSize, squareSize, ST77XX_WHITE);
-                }
-            }
-            tft.setCursor(squareX + squareSize + 6, y);
-            if (menu1SelectedIdx == itemIdx) {
-                tft.setTextColor(ST77XX_BLACK, ST77XX_WHITE);
-            } else {
-                tft.setTextColor(ST77XX_WHITE, ST77XX_BLACK);
-            }
-            tft.setTextSize(2);
-            if (itemIdx == 0) {
-                tft.print("...");
-            } else {
-                tft.print(options[itemIdx - 1]);
-            }
-            y += 30;
-        }
-        tft.setTextColor(ST77XX_WHITE);
-        tft.setTextSize(2);
-    } else if (currentMenu == MENU_2) {
-        // Draw title and options for Menu 
-        const char* options[NUM_MENUB_OPTIONS] = {"A", "B", "C", "D", "E", "F"};
-        int yStart = 10;
-        int itemIdx = menuBScrollIdx;
-        int y = yStart;
-        tft.fillScreen(ST77XX_BLACK);
-        for (int visible = 0; visible < MENUB_VISIBLE_OPTIONS && itemIdx < MENUB_TOTAL_ITEMS; ++visible, ++itemIdx) {
-            int squareX = 10;
-            int squareY = y + 6;
-            int squareSize = 12;
-            if (itemIdx != 0) {
-                if (itemIdx == menuBActiveIdx) {
-                    tft.fillRect(squareX, squareY, squareSize, squareSize, ST77XX_MAGENTA);
-                } else {
-                    tft.drawRect(squareX, squareY, squareSize, squareSize, ST77XX_WHITE);
-                }
-            }
-            tft.setCursor(squareX + squareSize + 6, y);
-            if (menuBSelectedIdx == itemIdx) {
-                tft.setTextColor(ST77XX_BLACK, ST77XX_WHITE);
-            } else {
-                tft.setTextColor(ST77XX_WHITE, ST77XX_BLACK);
-            }
-            tft.setTextSize(2);
-            if (itemIdx == 0) {
-                tft.print("...");
-            } else {
-                tft.print(options[itemIdx - 1]);
-            }
-            y += 30;
-        }
-        tft.setTextColor(ST77XX_WHITE);
-        tft.setTextSize(2);
+
+
     } else if (currentMenu == STUTTER_TEMPERATURE_MENU) {
         tft.fillScreen(ST77XX_BLACK);
         // Title at top
@@ -639,7 +561,7 @@ void MenuManager::mainMenuUp() {
     }
 }
 void MenuManager::mainMenuDown() {
-    if (mainMenuSelectedIdx < 15) { // 16 items, idx 0-15
+    if (mainMenuSelectedIdx < 13) { // 14 items, idx 0-13
         mainMenuSelectedIdx++;
         if (mainMenuSelectedIdx > mainMenuScrollIdx + MAIN_MENU_VISIBLE_ITEMS - 1) {
             mainMenuScrollIdx = mainMenuSelectedIdx - MAIN_MENU_VISIBLE_ITEMS + 1;
@@ -655,26 +577,25 @@ void MenuManager::mainMenuRight() {
 void MenuManager::mainMenuSelect() {
     switch (mainMenuSelectedIdx) {
         case 0:
-            currentMenu = MENU_1;
-            menu1SelectedIdx = 0;
-            menu1ScrollIdx = 0;
-            break;
-        case 1:
-            currentMenu = MENU_2;
-            menuBSelectedIdx = 0;
-            menuBScrollIdx = 0;
-            break;
-        case 2:
             currentMenu = NOTE_JITTER_PROB_MENU;
             jitterInputBuffer = String(noteJitterProb);
             break;
-        case 3:
+        case 1:
+            currentMenu = OFFSET_MENU;
+            offsetSelectedIdx = 0;
+            offsetScrollIdx = 0;
+            break;
+        case 2:
             currentMenu = DRUM_JITTER_PROB_MENU;
             drumJitterInputBuffer = String(drumJitterProb);
             break;
-        case 4:
+        case 3:
             currentMenu = RETRIGGER_PROB_MENU;
             retriggerInputBuffer = String(retriggerProb);
+            break;
+        case 4:
+            currentMenu = RETRIGGER_SYNTH_MENU;
+            retriggerSynthSelectedIdx = 0;
             break;
         case 5:
             currentMenu = RANDOM_DROP_PROB_MENU;
@@ -685,107 +606,34 @@ void MenuManager::mainMenuSelect() {
             delayNoteInputBuffer = String(delayNoteProb);
             break;
         case 7:
-            currentMenu = STUTTER_TEMPERATURE_MENU;
-            stutterTemperatureInputBuffer = String(stutterTemperature);
-            break;
-        case 8:
-            currentMenu = CHANNEL_CONFIG_MENU;
-            channelConfigSelectedIdx = 0;
-            break;
-        case 9:
             currentMenu = STUTTER_LENGTH_MENU;
             stutterLengthSelectedIdx = 0;
             stutterLengthScrollIdx = 0;
             break;
-        case 10:
-            currentMenu = OFFSET_MENU;
-            offsetSelectedIdx = 0;
-            offsetScrollIdx = 0;
+        case 8:
+            currentMenu = STUTTER_TEMPERATURE_MENU;
+            stutterTemperatureInputBuffer = String(stutterTemperature);
             break;
-        case 11:
-            currentMenu = RETRIGGER_SYNTH_MENU;
-            retriggerSynthSelectedIdx = 0;
-            break;
-        case 12:
-            currentMenu = PITCHBEND_PROB_MENU;
-            pitchbendProbInputBuffer = String(pitchbendProb);
-            break;
-        case 13:
+        case 9:
             currentMenu = DELAY_TIMES_MENU;
             delayTimeSelectedIdx = 0;
             break;
-        case 14:
+        case 10:
+            currentMenu = PITCHBEND_PROB_MENU;
+            pitchbendProbInputBuffer = String(pitchbendProb);
+            break;
+        case 11:
+            currentMenu = CHANNEL_CONFIG_MENU;
+            channelConfigSelectedIdx = 0;
+            break;
+        case 12:
             readyToRestoreDefaults = true;
             break;
-        case 15:
+        case 13:
             readyToDisableAll = true;
             break;
         default:
             break;
-    }
-}
-
-// MENU_1
-void MenuManager::menu1Up() {
-    if (menu1SelectedIdx > 0) {
-        menu1SelectedIdx--;
-        if (menu1SelectedIdx < menu1ScrollIdx) {
-            menu1ScrollIdx = menu1SelectedIdx;
-        }
-    }
-}
-void MenuManager::menu1Down() {
-    if (menu1SelectedIdx < MENU1_TOTAL_ITEMS - 1) {
-        menu1SelectedIdx++;
-        if (menu1SelectedIdx > menu1ScrollIdx + MENU1_VISIBLE_OPTIONS - 1) {
-            menu1ScrollIdx = menu1SelectedIdx - MENU1_VISIBLE_OPTIONS + 1;
-        }
-    }
-}
-void MenuManager::menu1Left() {
-    // No left navigation in menu1
-}
-void MenuManager::menu1Right() {
-    // No right navigation in menu1
-}
-void MenuManager::menu1Select() {
-    if (menu1SelectedIdx == 0) {
-        currentMenu = MAIN_MENU;
-    } else {
-        menu1ActiveIdx = menu1SelectedIdx;
-        saveMenu1(EEPROM_ADDR_MENU1);
-    }
-}
-
-// MENU_2
-void MenuManager::menu2Up() {
-    if (menuBSelectedIdx > 0) {
-        menuBSelectedIdx--;
-        if (menuBSelectedIdx < menuBScrollIdx) {
-            menuBScrollIdx = menuBSelectedIdx;
-        }
-    }
-}
-void MenuManager::menu2Down() {
-    if (menuBSelectedIdx < MENUB_TOTAL_ITEMS - 1) {
-        menuBSelectedIdx++;
-        if (menuBSelectedIdx > menuBScrollIdx + MENUB_VISIBLE_OPTIONS - 1) {
-            menuBScrollIdx = menuBSelectedIdx - MENUB_VISIBLE_OPTIONS + 1;
-        }
-    }
-}
-void MenuManager::menu2Left() {
-    // No left navigation in menu2
-}
-void MenuManager::menu2Right() {
-    // No right navigation in menu2
-}
-void MenuManager::menu2Select() {
-    if (menuBSelectedIdx == 0) {
-        currentMenu = MAIN_MENU;
-    } else {
-        menuBActiveIdx = menuBSelectedIdx;
-        saveMenuB(EEPROM_ADDR_MENUB);
     }
 }
 
