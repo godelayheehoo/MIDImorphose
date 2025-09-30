@@ -1,31 +1,33 @@
 
-# MIDI Mangler V2
+# MIDImorphose
 
 Updates todo:
 - explain the rolling stutter buffer now.
 - List out the defaults that restore defaults restores.
+- update menu list
+- velocity coercion switch
 
 
 ## Overview
 
-MIDI Mangler V2 is a PlatformIO-based Arduino project for the Teensy 4.1 board. It manipulates MIDI events in real time, providing features such as stuttering/looping, channel filtering, timing effects, note jitter, and retriggering. The project uses a visual menu system on a TFT display for configuration, with hardware controls for performance features. Channel assignments are set using dipswitches and confirmed via the menu. Channel settings are saved to EEPROM for persistence. The project uses the FortySevenEffects-derived teensy MIDI library for MIDI communication.
+MIDImorphose is a PlatformIO-based Arduino project for the Teensy 4.1 board. It manipulates MIDI events in real time, providing features such as stuttering/looping, channel filtering, timing effects, note jitter, and retriggering. The project uses a visual menu system on a TFT display for configuration, with hardware controls for performance features. Channel assignments are set using dipswitches and confirmed via the menu. Channel settings are saved to EEPROM for persistence. The project uses the FortySevenEffects-derived teensy MIDI library for MIDI communication.
 
 ## Features
 
 - **Stutter/Loop MIDI Events:** Toggle stutter mode using the stutter switch to loop MIDI events for creative effects.
 - **Stutter Timestretching:** Adjust the stretch potentiometer to change playback speed for stuttered notes. The current stretch value is shown on the TM1637 7-segment display.
-- **Channel Assignment:** Set drum and synth channel selections using dipswitches, then confirm assignment via the TFT menu (“set drum channels” / “set synth channels”). Channel settings are saved to EEPROM.
+- **Channel Assignment:** Set drum and synth channel selections using dipswitches, then confirm assignment via the TFT menu (“set drum channels” / “set synth channels”). Channel settings are saved to EEPROM. 
 - **Timing Effects:** Dipswitches control timing resolution (from 1/32 to 1/2 notes).
 - **Note Jitter:** Enable/disable jitter using the dedicated switch. Jitter probability can be set via the TFT menu using keypad input.  Note jitter shares a button with drum machine jitter, so the note (synth) jitter can be disabled in the TFT menu.
 - **Drum Jitter:** Enable/disable jitter using the dedicated switch (same as for synth).  Jitter probability can be set via the TFT menu using keypad input (dedicatd probability).
 - **Retriggering:** Enable/disable retriggering using the dedicated switch. Retrigger probability can be set via the TFT menu using keypad input.
-- **Pitch Bend Glitching:** Random pitch bends can be triggered on synth channels.  Currently, the probability is hardcoded to be somewhat rare.  
+- **Pitch Bend Glitching:** Random pitch bends can be triggered on synth channels.  This is not traditional probability-- you set the numerator, the denominator is 100,000. This "rolls", or has the probability tested, approximately once on every MIDI clock pulse, so 96 times per bar.  This is a lot, so you usually want to keep it slow. The channel is chosen at random from among the active channels.
 - **Buffer Management:** Large buffer for MIDI events.
-- **MIDI Panic:** Dedicated button sends "All Notes Off" to all channels. OLED displays panic status and channel matrix.
+- **Panic:** Dedicated button sends "All Notes Off" to all channels. OLED displays panic status and channel matrix.  This also reboots the TFT screen.
 - **Display Support:**
   - **TFT (ST7789):** Visual menu system for configuration and navigation.
-  - **OLED (SSD1306):** Shows channel matrix and panic status.
-  - **TM1637 7-segment:** Displays current stretch value.
+  - **OLED (SSD1306):** Shows channel matrix, panic status, stretch value, and activated velocity coercion pattern.
+  - **TM1637 7-segment:** Displays current stretch value.  
 
 ## Hardware Setup
 
@@ -36,10 +38,9 @@ MIDI Mangler V2 is a PlatformIO-based Arduino project for the Teensy 4.1 board. 
   - Panic button (pin 3)
   - Retrigger switch (pin 40)
   - Synth jitter switch (pin 39)
+  - Velocity coercion switch (pin 32)
   - Log button (pin 8)
 - **Dipswitches:**
-  - Tempo: pins 14 (ones), 15 (twos), 16 (fours), 17 (eights)
-  - Offset/Scale: pins 11 (ones), 20 (twos), 12 (fours)
   - MIDI channel assignment: pins 21–38 (see code for mapping)
 - **Displays:**
   - TFT (ST7789, SPI1): Menu navigation and configuration
@@ -84,10 +85,14 @@ MIDI Mangler V2 is a PlatformIO-based Arduino project for the Teensy 4.1 board. 
 | 14              | 72              | dotted 1/2 note     |
 | 15              | 96              | whole note          |
 
+8. **Reverse Stuttering**: Pressing the 'A' key while stuttering will reverse playback (end notes get a little weird)
+
+9. **Stutter Percolation**: Notes will randomly swap places with eachother within a stutter buffer.  The "stutter temperature" parameter controls how far away the notes that can be swapped with are. 
+
 ## Menu System
 
 
-The TFT display provides a visual menu system for configuration and navigation. The menu structure is as follows:
+The TFT display provides a visual menu system for configuration and navigation. On any menu, the 'D' key can be pressed on the keypad to return to the main menu.  The menu structure is as follows:
 
 - **Main Menu:**
   - Menu 1
@@ -105,9 +110,10 @@ The TFT display provides a visual menu system for configuration and navigation. 
   - Pitchbend Probability (ptchbnd ~prob)
   - Delay Times (min/max)
   - Restore Defaults
+  - Disable All
 
 - **Menu 1 / Menu 2:**
-  - User-defined options (see code for details). Selectable and scrollable.
+  - Leftover menus from initial development I haven't removed yet. 
 
 - **Note Jitter / Drum Jitter / Retrigger / Random Drop / Delay Note / Pitchbend Probability / Stutter Temperature Menus:**
   - Enter probability or value using the keypad. Press `#` to confirm, `*` to clear input. Only the '...' option is selectable; pressing select returns to the main menu.

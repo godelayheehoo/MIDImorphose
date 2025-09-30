@@ -239,7 +239,9 @@ void MenuManager::render() {
         renderProbabilityMenu("drum jitter prob", drumJitterInputBuffer);
     } else if (currentMenu == NOTE_JITTER_PROB_MENU) {
         renderProbabilityMenu("note jitter prob", jitterInputBuffer);
-    } else if (currentMenu == RETRIGGER_SYNTH_MENU) {
+    } else if (currentMenu == RETRIGGER_PROB_MENU){
+        renderProbabilityMenu("retrigger prob", retriggerInputBuffer);}
+    else if (currentMenu == RETRIGGER_SYNTH_MENU) {
         tft.fillScreen(ST77XX_BLACK);
         tft.setTextSize(2);
         tft.setTextColor(ST77XX_WHITE);
@@ -497,36 +499,7 @@ void MenuManager::render() {
         tft.setTextColor(ST77XX_YELLOW);
         tft.setCursor(10, 120);
         tft.print("press # when done, press * to restart");
-    } else if (currentMenu == RETRIGGER_PROB_MENU) {
-        tft.fillScreen(ST77XX_BLACK);
-        // Title at top
-        tft.setTextSize(2);
-        tft.setTextColor(ST77XX_WHITE);
-        tft.setCursor(10, 10);
-        tft.print("retrigger prob");
-
-        // '...' at top, always highlighted
-        tft.setTextSize(2);
-        tft.setCursor(10, 40);
-        tft.setTextColor(ST77XX_BLACK, ST77XX_WHITE);
-        tft.print("...");
-
-        // Number in middle, always cyan
-        tft.setTextSize(3);
-        tft.setCursor(40, 80);
-        tft.setTextColor(ST77XX_CYAN, ST77XX_BLACK);
-        if (retriggerInputBuffer.length() > 0) {
-            tft.print(retriggerInputBuffer);
-        } else {
-            tft.print("0");
-        }
-
-        // Instructions at bottom
-        tft.setTextSize(1);
-        tft.setTextColor(ST77XX_YELLOW);
-        tft.setCursor(10, 120);
-        tft.print("press # when done, press * to restart");
-    } else if (currentMenu == DELAY_TIMES_MENU){
+    }  else if (currentMenu == DELAY_TIMES_MENU){
     tft.fillScreen(ST77XX_BLACK);
     tft.setTextSize(2);
     tft.setTextColor(ST77XX_WHITE);
