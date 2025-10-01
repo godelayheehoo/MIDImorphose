@@ -389,8 +389,8 @@ const byte PERC_BUFFER_SIZE = 128;
 
 const byte RERETRIGGER_PROB = 50;
 const byte RETRIGGER_BUFFER_SIZE = 64;
-// const byte RETRIGGER_TIME = 50; // could do min/max if we wanted to. This is the delay time between ntoes
-const byte RETRIGGER_TIME = 100; //todo: make this different for drums and synths? 50 is fine for drums, too fast for synths.
+const byte RETRIGGER_SYNTH_TIME = 200;
+const byte RETRIGGER_DRUM_TIME = 50; //todo: make this different for drums and synths? 50 is fine for drums, too fast for synths.
 const byte RETRIGGER_NOTE_LENGTH = 50; //doesn't matter for drums, might for samples, does for synth
 
 // const byte PITCHBEND_PROB_PER_PULSE_10000 = 3; //note: this is x/100000, calculated once per clock pulse. 
@@ -2402,7 +2402,16 @@ void cueRetriggeredNote(MidiEvent me){
 //             }
 // #endif
           rEvent.velocity = me.velocity;
-          rEvent.playTime = millis()+RETRIGGER_TIME;
+          //note this means that if it's a synth & drum, it uses the synth time. 
+          int retriggerTime;
+          if(drumMIDIenabled[me.channel-1]){
+             retriggerTime = RETRIGGER_DRUM_TIME;
+          }
+          else{
+            retriggerTime = RETRIGGER_SYNTH_TIME;
+          }
+          rEvent.playTime = millis()+retriggerTime;
+          
           // rEvent.played = false; //not used
           // rEvent.pulseNumber = currentPulse; //not used
           retriggerBuffer.push(rEvent);
@@ -2413,7 +2422,7 @@ void cueRetriggeredNote(MidiEvent me){
     for(int i=0;i<10;i++){
       if(!randomProbResult(RERETRIGGER_PROB)){return;} //stop if we fail a roll
       //assuming we passed, we just create a new retrigger event, being sure to increse the time 
-      long newEndTime =  rEvent.playTime  + (1+i)*RETRIGGER_TIME;
+      long newEndTime =  rEvent.playTime  + (1+i)*retriggerTime;
       MidiEvent otherEvent;
       otherEvent.type = rEvent.type;
       otherEvent.channel = rEvent.channel;
