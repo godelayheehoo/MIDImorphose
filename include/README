@@ -1,37 +1,69 @@
 
-This directory is intended for project header files.
+# MIDImorphose Include Directory
 
-A header file is a file containing C declarations and macro definitions
-to be shared between several project source files. You request the use of a
-header file in your project source file (C, C++, etc) located in `src` folder
-by including it, with the C preprocessing directive `#include'.
+This directory contains the project-specific header files that provide centralized configuration and hardware definitions for the MIDImorphose MIDI processing system.
 
-```src/main.c
+## Header Files Overview
 
-#include "header.h"
+### 📍 `PinDefinitions.h`
+**Hardware Pin Configuration**
 
-int main (void)
-{
- ...
-}
+Contains all hardware pin assignments for the Teensy 4.1-based system, organized by function:
+
+- **Direct Teensy Pins**: Buttons, switches, LEDs, analog inputs
+- **Display Pins**: TM1637 7-segment, TFT (ST7789), OLED (SSD1306)  
+- **MCP23X17 Expander Pins**: Menu controls, keypad matrix, MIDI channel dipswitches
+- **Pin Arrays**: Pre-built arrays for easy iteration (keypad, MIDI channels, menu controls)
+
+**When to modify**: Hardware changes, board layout updates, pin reassignments
+
+### ⚙️ `SystemConfig.h`
+**Core System Configuration**
+
+Defines fundamental operational parameters that control system behavior:
+
+- **Buffer Sizes**: Event processing, jitter, retrigger, percussion buffers
+- **Timing Constants**: Debounce times, display durations, retrigger intervals
+- **Audio Processing**: Drum machine limits, pitch bend voices, probabilities
+- **Display Settings**: Screen dimensions, LED blink patterns
+- **Debug Flags**: Development and debugging controls
+- **Utility Macros**: Helper functions and range checking
+
+**When to modify**: Performance tuning, memory optimization, timing adjustments
+
+### 💾 `EEPROMAddresses.h` 
+**Non-Volatile Memory Layout**
+
+Maps EEPROM addresses for persistent storage of user settings and system state:
+
+- **Menu Settings**: User preferences, display modes, effect parameters
+- **MIDI Configuration**: Channel assignments, routing preferences
+- **System State**: Calibration data, user customizations
+
+**When to modify**: Adding new persistent settings, reorganizing storage layout
+
+## Usage Patterns
+
+```cpp
+// In your source files, include the needed headers:
+#include "PinDefinitions.h"    // For hardware pin access
+#include "SystemConfig.h"      // For system parameters
+#include "EEPROMAddresses.h"   // For persistent storage
+
+// Example usage:
+pinMode(PIN_STUTTER_SWITCH, INPUT);           // Hardware pin
+digitalWrite(PIN_BUFFER_FULL_LED, HIGH);     // LED control
+analogRead(PIN_STRETCH_POT);                 // Analog input
+keypad.setup(KEYPAD_COL_PINS, KEYPAD_ROW_PINS); // Pin arrays
+
+// System configuration:
+CircularBuffer<MidiEvent, MAX_EVENTS> buffer;  // Buffer sizing
+delay(DEBOUNCE_MS);                             // Timing constants
 ```
 
-Including a header file produces the same results as copying the header file
-into each source file that needs it. Such copying would be time-consuming
-and error-prone. With a header file, the related declarations appear
-in only one place. If they need to be changed, they can be changed in one
-place, and programs that include the header file will automatically use the
-new version when next recompiled. The header file eliminates the labor of
-finding and changing all the copies as well as the risk that a failure to
-find one copy will result in inconsistencies within a program.
+## Development Guidelines
 
-In C, the convention is to give header files names that end with `.h'.
-
-Read more about using header files in official GCC documentation:
-
-* Include Syntax
-* Include Operation
-* Once-Only Headers
-* Computed Includes
-
-https://gcc.gnu.org/onlinedocs/cpp/Header-Files.html
+- **Pin Changes**: Always update `PinDefinitions.h` rather than hardcoding
+- **Performance Tuning**: Adjust buffer sizes in `SystemConfig.h` based on testing
+- **New Features**: Add EEPROM addresses to `EEPROMAddresses.h` for persistent settings
+- **Documentation**: Update comments when modifying behavior or adding new parameters
