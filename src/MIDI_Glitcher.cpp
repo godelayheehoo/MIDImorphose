@@ -113,6 +113,7 @@ channel to off and updating.  There's nuance here though-- the stuttered notes w
 #include "NoteStructs.h"
 #include "SortedBuffer.h"
 #include "MidiUtils.h"
+#include "PinDefinitions.h"
 #include <EEPROM.h>
 #include <Arduino.h>
 #include <CircularBuffer.h>
@@ -130,13 +131,10 @@ MIDI_CREATE_INSTANCE(HardwareSerial, Serial5, MIDItx);
 #include <Adafruit_SSD1306.h>
 #define SCREEN_WIDTH 128
 #define SCREEN_HEIGHT 64
-#define OLED_RESET -1
-Adafruit_SSD1306 statusDisplay(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire2, OLED_RESET);
+Adafruit_SSD1306 statusDisplay(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire2, PIN_OLED_RESET);
 //- TM1637 (7-seg) screen
 #include <TM1637Display.h>
-#define CLK 7//pins definitions for TM1637 and can be changed to other ports       
-#define DIO 6
-TM1637Display seg7display(CLK, DIO); 
+TM1637Display seg7display(PIN_TM1637_CLK, PIN_TM1637_DIO); 
 
 // Temporary view system
 unsigned long tempViewStartTime = 0;
@@ -151,13 +149,11 @@ const unsigned long TEMP_DISPLAY_TIME = 2000;  // milliseconds
 #include <SPI.h>
 #include "MenuManager.h"
 // Pin setup
-#define TFT_CS   0
-#define TFT_DC   28
-#define TFT_RST  -1
+// TFT pins defined in PinDefinitions.h
 
 
 // SPI1 hardware peripheral
-Adafruit_ST7789 menuTft = Adafruit_ST7789(&SPI1, TFT_CS, TFT_DC, TFT_RST);
+Adafruit_ST7789 menuTft = Adafruit_ST7789(&SPI1, PIN_TFT_CS, PIN_TFT_DC, PIN_TFT_RST);
 MenuManager menu(menuTft);
 
 byte oldPulseResolution;
@@ -272,11 +268,7 @@ struct McpButtonHelper{
 
 
 //Control pad
-const byte menuRightPin = 0;
-const byte menuLeftPin = 1;
-const byte menuUpPin = 2;
-const byte menuDownPin = 3;
-const byte menuSelectPin = 4;
+// Menu control pins defined in PinDefinitions.h
 
 McpButtonHelper menuRightButton;
 McpButtonHelper menuLeftButton;
@@ -351,8 +343,9 @@ struct MatrixKeypad {
   }
 };
 
-const uint8_t COL_PINS[4] = {11, 10, 9, 8};
-const uint8_t ROW_PINS[4] = {15, 14, 13, 12};
+// Keypad matrix pins (defined in PinDefinitions.h)
+const uint8_t COL_PINS[4] = {MCP_KEYPAD_COL1, MCP_KEYPAD_COL2, MCP_KEYPAD_COL3, MCP_KEYPAD_COL4};
+const uint8_t ROW_PINS[4] = {MCP_KEYPAD_ROW1, MCP_KEYPAD_ROW2, MCP_KEYPAD_ROW3, MCP_KEYPAD_ROW4};
 
 MatrixKeypad keypad;
 
@@ -367,7 +360,7 @@ MatrixKeypad keypad;
 // TempoTracker tempoTracker;
 
 
-const int logButtonPin = 8;
+// Log button pin defined in PinDefinitions.h
 ButtonHelper logButton;
 
 
@@ -412,15 +405,12 @@ const byte MAX_DELAYED_NOTES = 128;
 
 
 // --- LED Pins ---
-const int bufferLedPin = 9; 
-
 // --- Button pins ---
-const int stutterButtonPin = 2;
-const int panicButtonPin = 3;
+// Button pins defined in PinDefinitions.h
 ButtonHelper panicButton;
 
 // --- Potentiometer Pins ---
-int stretchPotPin = A17;
+// Potentiometer pin defined in PinDefinitions.h
 
 // --- Loop buffer ---
 
@@ -632,24 +622,12 @@ uint16_t drumState = 0;
 uint16_t synthState = 0;
 
 //midi channels
-// Map MIDI channels 1–16 to pins
+// Map MIDI channels 1–16 to pins (defined in PinDefinitions.h)
 const uint8_t midiPins[16] = {
-  0,  // channel 1
-  1,  // channel 2
-  2,  // channel 3
-  3,  // channel 4
-  4,  // channel 5
-  5,  // channel 6
-  6,  // channel 7
-  7,  // channel 8
-  15,  // channel 9
-  14,  // channel 10
-  13,  // channel 11
-  12,  // channel 12
-  11,  // channel 13
-  10,  // channel 14
-  9,  // channel 15
-  8   // channel 16
+  MCP_MIDI_CH1,  MCP_MIDI_CH2,  MCP_MIDI_CH3,  MCP_MIDI_CH4,
+  MCP_MIDI_CH5,  MCP_MIDI_CH6,  MCP_MIDI_CH7,  MCP_MIDI_CH8,
+  MCP_MIDI_CH9,  MCP_MIDI_CH10, MCP_MIDI_CH11, MCP_MIDI_CH12,
+  MCP_MIDI_CH13, MCP_MIDI_CH14, MCP_MIDI_CH15, MCP_MIDI_CH16
 };
 // Array to track which channels are ON
 
@@ -734,14 +712,13 @@ bool activeNotes[MAX_NOTES] = { false };
 //these two are set by button-switches. We'll keep it like that. 
 bool retriggerOn = false; 
 bool jitterOn = false; 
-const int retriggerSwitchPin = 40;
-const int jitterSwitchPin = 39;
+// Switch pins defined in PinDefinitions.h
 SwitchHelper retriggerSwitch;
 SwitchHelper jitterSwitch;
 
 //temp
 bool velocityCoercion = false;
-const int velocityCoercionSwitchPin = 32;
+// Velocity coercion switch pin defined in PinDefinitions.h
 SwitchHelper velocityCoercionSwitch;
 
 byte octaveShiftOption = 0; //todo: implement
@@ -1057,21 +1034,21 @@ void setup() {
   //display setup
   setupStatusDisplay();
   Serial.println(F("Setting pins"));
-  pinMode(stutterButtonPin, INPUT); 
+  pinMode(PIN_STUTTER_SWITCH, INPUT); 
  
-  panicButton.setup(panicButtonPin);
+  panicButton.setup(PIN_PANIC_BUTTON);
 
-  pinMode(bufferLedPin, OUTPUT);
-  logButton.setup(logButtonPin, INPUT);
+  pinMode(PIN_BUFFER_FULL_LED, OUTPUT);
+  logButton.setup(PIN_LOG_BUTTON, INPUT);
 
-  retriggerSwitch.setup(retriggerSwitchPin);
-  jitterSwitch.setup(jitterSwitchPin);
+  retriggerSwitch.setup(PIN_RETRIGGER_SWITCH);
+  jitterSwitch.setup(PIN_JITTER_SWITCH);
   
   //temp 
-  velocityCoercionSwitch.setup(velocityCoercionSwitchPin);
+  velocityCoercionSwitch.setup(PIN_VELOCITY_COERCION);
 
   Serial.println("Turning on buffer LED pin");
-  digitalWrite(bufferLedPin, HIGH);
+  digitalWrite(PIN_BUFFER_FULL_LED, HIGH);
   delay(100);
 
   Serial.println(F("Turning on MIDI"));
@@ -1097,7 +1074,7 @@ void setup() {
 
   drawStretchDisplay();
 
-  digitalWrite(bufferLedPin, LOW);
+  digitalWrite(PIN_BUFFER_FULL_LED, LOW);
 
 
 
@@ -1131,11 +1108,11 @@ void setup() {
   keypad.begin(ROW_PINS, COL_PINS);
 
   Serial.println("Setting up menu buttons");
-  menuRightButton.setup(menuRightPin, &mcpControls);
-  menuLeftButton.setup(menuLeftPin, &mcpControls);
-  menuUpButton.setup(menuUpPin, &mcpControls);
-  menuDownButton.setup(menuDownPin, &mcpControls);
-  menuSelectButton.setup(menuSelectPin, &mcpControls);
+  menuRightButton.setup(MCP_MENU_RIGHT, &mcpControls);
+  menuLeftButton.setup(MCP_MENU_LEFT, &mcpControls);
+  menuUpButton.setup(MCP_MENU_UP, &mcpControls);
+  menuDownButton.setup(MCP_MENU_DOWN, &mcpControls);
+  menuSelectButton.setup(MCP_MENU_SELECT, &mcpControls);
   Serial.println("Menu buttons set up");
 
 
@@ -1605,7 +1582,7 @@ if(velocityCoercionSwitch.update()){
 
 // read switches and build new state
   //get pot value
-  stretchPotValueLiteral = analogRead(stretchPotPin);
+  stretchPotValueLiteral = analogRead(PIN_STRETCH_POT);
 
   stretchPotValueFloat = 0.1 + 3.9*(stretchPotValueLiteral/1023.0);
 //smoothing
@@ -1719,7 +1696,7 @@ if (panicButton.update()) {
       stutterBuffer.push(e);
     }
 
-    digitalWrite(bufferLedPin,LOW);
+    digitalWrite(PIN_BUFFER_FULL_LED,LOW);
     //
     //kill existing notes on tracked channels
     killTrackedChannelsNotes();
@@ -1971,7 +1948,7 @@ bool readStutterButton() {
   static bool buttonState = HIGH;
   static unsigned long lastDebounceTime = 0;
 
-  bool reading = digitalRead(stutterButtonPin);
+  bool reading = digitalRead(PIN_STUTTER_SWITCH);
 
   if (reading != lastButtonState) {
     lastDebounceTime = millis();
@@ -2048,10 +2025,10 @@ bool checkForNoteOn(byte noteOffNumber) {
 void checkPulseBufferFullSetLED(){
   if(isBlinking){return;}
   if (pulseStartTimes.size() >= menu.pulseResolution) {
-    digitalWrite(bufferLedPin, HIGH);
+    digitalWrite(PIN_BUFFER_FULL_LED, HIGH);
   }
   else{
-    digitalWrite(bufferLedPin,LOW);
+    digitalWrite(PIN_BUFFER_FULL_LED,LOW);
   
   }
 }
@@ -2072,7 +2049,7 @@ void updateBufferFullBlink() {
     }
 
     // Determine pattern based on starting LED state
-    bool ledWasOn = digitalRead(bufferLedPin);
+    bool ledWasOn = digitalRead(PIN_BUFFER_FULL_LED);
     bool ledState;
 
     if (ledWasOn) {
@@ -2083,7 +2060,7 @@ void updateBufferFullBlink() {
       ledState = (blinkStep % 2 == 0) ? HIGH : LOW;
     }
 
-    digitalWrite(bufferLedPin, ledState);
+    digitalWrite(PIN_BUFFER_FULL_LED, ledState);
     blinkStartTime = now;
   }
 }
