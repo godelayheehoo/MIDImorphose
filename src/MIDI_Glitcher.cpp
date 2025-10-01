@@ -1,70 +1,43 @@
-/*
-  MIDI_repeater_midiClock_v7.ino
-  Stutters (loops) midi on pressing button.  One bank of dipswitches controls active midi channels (treating drum and synth seperately, see below), 
 
-
-The buffer that holds midi events is large but not unlimited.  On a MEGA, it holds 8*48=384 midi note on/off events.  You actually get a little more than that due to some optimization.
-The warning LED will blink 4 times if you are writing to a full buffer (which will cause the oldest notes to be dropped).
-
-A MIDI PANIC button is available to kill stuck or errant notes.  A bug I haven't been able to pin down will occasionally cause unsequenced/played notes to randomly play. These are 
-often outside of the valid MIDI range, so your device's behavior is not predictable. 
-
-//TODO: update this to explain menu settings. 
-To update the DRUM MIDI channel settings, set the dipswitches and press the red button. TO do the same for synths, press the green button. Note channels can also be both or neither.
-Drum channels (TODO) feature instrument swapping (TODO: set note range)
-Synth channels (TODO) feature note jitter
-Both channels are affected by timestretching
-TRICK: note that *while stuttering* you can manipulate which channels are on. You can thus stutter the whole thing and then let drums through by changing the relevant
-channel to off and updating.  There's nuance here though-- the stuttered notes will remain, but you can play on top of what's stuttered, which can create cool effects
-
-*/
-
-
-//todo: try changing time to uint16_t (you'll need to use relative time), try changing time to be synced to clock pulses (byte/uint8_t)
 //toodo: Consider a more general status menu, that shows things like pulseResolution, tempo, etc?  How often to update?
 //todo: it's kind of cool when I lower the events buffer way low and loop off of that, maybe make that something you can turn on/off
 //todo: update code to use the createOffNote() function where appropraite
-//TODO: should actually maybe -- check if you haven't done this-- make sure that the temp swapping
-//only happens on notes whose time it is to be played, not on every loop. <- what does this mean?
-//TODO: add full reversal.  WIll require changing reference in playedSavedPulses to use a copy of the event,
-//but make sure we're still updating played correctly.  This could be easier with a move to a second buffer actually.  But still,
-//need to reverse note assignments, keeping time in place.  But it's easily reversible, just swap again. 
-//this might take a while though, because we have to first flip the note ons, then find the note offs to swap as well.  Which isn't easy,
-//because you can't assume it goes Aon Aoff Bon Boff, COn COff, etc.  SO you have to first flip a note on, then find its note off, then repeat.
-//on teh other hand, this only needs to happen once, when the button is pressed, so not too bad maybe.  Should it have its own trigger button or
-//be menu based?
-//TODO: maybe make a menu option that lets you set the "default" status screen to be the channel matrix vs stretch. 
-//kind of depends on if I end up removing the 7seg.
-//I could leave the 7seg and have the status show a 400 cell grid filling up left to right, top to bottom as you twist the pot
-//probably too slow.
+
+
 //TODO: try, it might not work well, but try having the SD matrix cells flash when notes come in?
-//too slow for midi processing probably. 
-//TODO: add a menu option to decide if percolation requires same-channel notes.  
+//too slow for midi processing probably --- maybe if I pull it out and just update outside the while loop?
+
+//TODO: add a menu option to decide if percolation requires same-channel notes. 
+
 //TODO: Submenus.
+
 //TODO: Do I want to re-add the ability to change channels mid-stutter with buttons?  It did lead to some cool effects.
-//todo: Think of how to handle this... you can add velocity rhythm patterns. Per channel though? randomly kicking in and out?
-//TODO: you have enough memory *you do), maybe consider way upping max pulse resolution and then working in grains?
-//TODO: if I do do reverse playback on stutter, I'm going to have to figure out how to actually enable 
-//it... another push button switch would kind of suck to have, wouldn't it?
+
+//TODO: you have enough memory (you do), maybe consider way upping max pulse resolution and then working in grains?
+//grains only really work with really dense notes though. This isn't audio.
 
 //todo: I mean, in general figure out if you want to be able to assign specific synths to specific channels.
+//maybe hold C and to enter "synth assign mode", then either navigate the OLED or enable us to enter numbers?
+//B then rotate -/S/D/S&D?  Maybe enter the mode and then use the d pad to navigate the OLED, left-right to move around, up down to rotate type?
+
 //doing so would let you do things like have CCs you can manipulate, enable jitter for drum machines, etc.  But how to do it?
 //I guess an enum and pointers to arrays or something?  
+
 //todo: Another thing you could do is enable specific CCs to be glitched in various ways.  Maybe would
 //want to enable the scroll wheel for that. 
+
 //todo: I could have drum machines only jitter within themselves, I could have drum machines
 //be able to jitter across eachother, I could have drum machines be able to jitter with synths.
 //unclear which is preferable. If we allow synths, do we fix a synth note or do we let it be the natural note number?
 //presumably the latter, so hats become one note, bass becomes another.  Though that *will* be out of key, so...
 //we'll start by just jittering internal to each machine. Jittering is also channel-internal, so this is easier.
+
 //todo: note that with the new stutter buffer system, jittering no longer affects stutter, though
 //it does affect the still incoming notes for the eventsBuffer. Could consider re-enabling jitter within the buffer
 //as well.... I'm not sure.  Probably not.
 
 //todo: maybe monitor for overload, some ideas in the chatgpt project for how to do that.
 
-
-//todo: send only clock from deluge and examine to make sure we only get clock bytes in.... something's going on here.
 //todo: investigate what other things you can turn off (using menu options) in order to reduce loop time.
 
 //todo: we could drain all the midi notes, then do ALL processing after, using the playTime to 
@@ -83,8 +56,6 @@ channel to off and updating.  There's nuance here though-- the stuttered notes w
 //which is awkward from a UI perspective.  Basically you have to track **all* on notes, and when >2 notes is received in a channel,
 //arp it.  Which.... gets rough.  Maybe try this out as its own tool on a mega first. 
 
-//add pitch bend prob now that we control it better. Logarithmic?
-
 //per brett, I should only octave shift if I'm not doing an extension add.  But I dunno. I do want it to sound
 //a little "wrong" some times, so it'll be glitchy.
 
@@ -92,12 +63,8 @@ channel to off and updating.  There's nuance here though-- the stuttered notes w
 
 //restoreDefaults() should call the reset drum defaults function, so that I only have to update one thing in the code.
 
-
 //todo: could also randomly just play notes from the stutter buffer sometimes.  Call this... blooping? I dunno
 //this can be done outside of the midi read loop, so it should be fast.
-
-//I do really like the idea of forcing velocity patterns.  But there's a lot of decisions that need to be made. Like, for instance,
-//if it's per-instrument and if so if we have control over it.  
 
 //I like overall velocity coercion I think.  I have it resetting currentPulseInBar to 0 on start/continue, so it should be fine.
 //should I also reset on new switch activations so it's possible to get "off"?
@@ -110,6 +77,8 @@ channel to off and updating.  There's nuance here though-- the stuttered notes w
 //I don't want to add another button-- also basically impossible at this point.
 //non-null defaults?
 //then maybe add an "everything off" menu option in addition to reset defaults?
+
+
 #include "NoteStructs.h"
 #include "SortedBuffer.h"
 #include "MidiUtils.h"
