@@ -92,8 +92,8 @@ Adafruit_MCP23X17 mcpMIDI;
 Adafruit_MCP23X17 mcpControls;
 //midi stuff
 #include <MIDI.h>
-MIDI_CREATE_INSTANCE(HardwareSerial, Serial8, MIDIrx);
-MIDI_CREATE_INSTANCE(HardwareSerial, Serial5, MIDItx); 
+MIDI_CREATE_INSTANCE(HardwareSerial, MIDI_RX_SERIAL, MIDIrx);
+MIDI_CREATE_INSTANCE(HardwareSerial, MIDI_TX_SERIAL, MIDItx); 
 
 //display stuff
 //- OLED Screen
@@ -113,7 +113,6 @@ void (*tempViewCallback)() = nullptr;
 // Display timing defined in SystemConfig.h
 
 //menu display
-#include <Adafruit_GFX.h>
 #include <Adafruit_ST7789.h>
 #include <SPI.h>
 #include "MenuManager.h"
