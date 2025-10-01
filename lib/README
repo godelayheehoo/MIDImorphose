@@ -1,46 +1,119 @@
 
-This directory is intended for project specific (private) libraries.
-PlatformIO will compile them to static libraries and link into the executable file.
+# MIDImorphose Library Directory
 
-The source code of each library should be placed in a separate directory
-("lib/your_library_name/[Code]").
+This directory contains project-specific libraries for the MIDImorphose MIDI processing system. These libraries provide core data structures, utilities, and third-party components needed for real-time MIDI manipulation.
 
-For example, see the structure of the following example libraries `Foo` and `Bar`:
+## Library Overview
 
-|--lib
-|  |
-|  |--Bar
-|  |  |--docs
-|  |  |--examples
-|  |  |--src
-|  |     |- Bar.c
-|  |     |- Bar.h
-|  |  |- library.json (optional. for custom build options, etc) https://docs.platformio.org/page/librarymanager/config.html
-|  |
-|  |--Foo
-|  |  |- Foo.c
-|  |  |- Foo.h
-|  |
-|  |- README --> THIS FILE
-|
-|- platformio.ini
-|--src
-   |- main.c
+### 🔧 `jamesUtils/` - Custom Utility Libraries
+**Core Data Structures and MIDI Processing Utilities**
 
-Example contents of `src/main.c` using Foo and Bar:
+A collection of custom-built C++ utilities optimized for real-time MIDI processing:
+
+#### `CircularBuffer.h`
+- **Purpose**: Template-based circular buffer for efficient event storage
+- **Features**: Thread-safe, fixed-size, O(1) push/pop operations
+- **Usage**: Primary storage for MIDI events during stuttering and processing
+- **Template**: `CircularBuffer<T, Capacity>` where T is data type, Capacity is buffer size
+
+#### `NoteStructs.h`
+- **Purpose**: Core MIDI event data structures
+- **Contains**: `MidiEvent` struct with type, channel, note, velocity, timing
+- **Features**: Debug printing, timing information, playback state tracking
+- **Usage**: Standard format for all MIDI events throughout the system
+
+#### `MidiUtils.h`
+- **Purpose**: MIDI processing helper functions and utilities
+- **Features**: Note manipulation, channel processing, utility functions
+- **Usage**: Common MIDI operations and data transformations
+
+#### `SortedBuffer.h`
+- **Purpose**: Sorted storage container for time-ordered events
+- **Features**: Maintains chronological order for proper MIDI playback timing
+- **Usage**: Event scheduling and time-based MIDI processing
+
+### 📟 `TM1637/` - 7-Segment Display Library
+**Third-Party Display Driver (Local Copy)**
+
+Complete TM1637 7-segment display library with local modifications:
+
+- **Purpose**: Drive the 7-segment displays for tempo/status information
+- **Contents**: Full library with examples, documentation, and platform files
+- **Source**: Local copy of TM1637 library for stability and custom modifications
+- **Files**: 
+  - `TM1637Display.h/cpp` - Main driver code
+  - `examples/` - Usage examples and test code
+  - `docs/` - Hardware documentation and datasheets
+
+## Library Structure
+
 ```
-#include <Foo.h>
-#include <Bar.h>
-
-int main (void)
-{
-  ...
-}
-
+lib/
+├── jamesUtils/           # Custom utilities (header-only)
+│   ├── CircularBuffer.h     # Ring buffer for events
+│   ├── NoteStructs.h        # MIDI event structures  
+│   ├── MidiUtils.h          # MIDI helper functions
+│   └── SortedBuffer.h       # Time-ordered storage
+├── TM1637/              # 7-segment display driver
+│   ├── TM1637Display.h      # Library header
+│   ├── TM1637Display.cpp    # Implementation
+│   ├── examples/            # Usage examples
+│   ├── docs/               # Documentation
+│   └── library.json        # PlatformIO metadata
+└── README               # This file
 ```
 
-The PlatformIO Library Dependency Finder will find automatically dependent
-libraries by scanning project source files.
+## Usage Examples
 
-More information about PlatformIO Library Dependency Finder
-- https://docs.platformio.org/page/librarymanager/ldf.html
+```cpp
+// Including the custom utilities
+#include "CircularBuffer.h"
+#include "NoteStructs.h"
+#include "MidiUtils.h"
+
+// Third-party library
+#include <TM1637Display.h>
+
+// Example usage:
+CircularBuffer<MidiEvent, 512> eventBuffer;  // Event storage
+MidiEvent event;                              // MIDI event structure
+TM1637Display display(CLK_PIN, DIO_PIN);     // 7-segment display
+
+// Create and store MIDI event
+event.type = 0x90;      // Note on
+event.channel = 1;
+event.note = 60;        // Middle C
+event.velocity = 100;
+eventBuffer.push(event);
+
+// Display tempo on 7-segment
+display.showNumberDec(120);  // Show "120" BPM
+```
+
+## Development Guidelines
+
+### Custom Libraries (`jamesUtils/`)
+- **Header-Only**: All utilities are template-based header-only for performance
+- **Real-Time Safe**: Designed for interrupt-safe, low-latency MIDI processing  
+- **Memory Efficient**: Fixed-size containers to avoid dynamic allocation
+- **Documentation**: Inline comments explain usage and performance characteristics
+
+### Third-Party Libraries (`TM1637/`)
+- **Local Copies**: Maintained locally for stability and custom modifications
+- **Version Control**: Track changes to avoid breaking updates
+- **Documentation**: Preserve original documentation and add modification notes
+
+### Adding New Libraries
+1. **Custom Utilities**: Add to `jamesUtils/` as header-only when possible
+2. **Third-Party**: Create separate directory with full library structure
+3. **Documentation**: Update this README with library description and usage
+4. **Testing**: Verify compatibility with real-time MIDI processing requirements
+
+## Performance Considerations
+
+- **CircularBuffer**: O(1) operations, interrupt-safe for real-time use
+- **Fixed Sizes**: All containers use compile-time sizing to avoid heap allocation
+- **Template-Based**: Header-only libraries reduce linking complexity
+- **MIDI Timing**: Utilities designed for microsecond-precision MIDI timing
+
+These libraries form the foundation of MIDImorphose's real-time MIDI processing capabilities, providing efficient data structures and reliable hardware interfaces.
