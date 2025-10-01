@@ -114,6 +114,7 @@ channel to off and updating.  There's nuance here though-- the stuttered notes w
 #include "SortedBuffer.h"
 #include "MidiUtils.h"
 #include "PinDefinitions.h"
+#include "SystemConfig.h"
 #include <EEPROM.h>
 #include <Arduino.h>
 #include <CircularBuffer.h>
@@ -129,8 +130,7 @@ MIDI_CREATE_INSTANCE(HardwareSerial, Serial5, MIDItx);
 //- OLED Screen
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
-#define SCREEN_WIDTH 128
-#define SCREEN_HEIGHT 64
+// Display dimensions defined in SystemConfig.h
 Adafruit_SSD1306 statusDisplay(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire2, PIN_OLED_RESET);
 //- TM1637 (7-seg) screen
 #include <TM1637Display.h>
@@ -141,7 +141,7 @@ unsigned long tempViewStartTime = 0;
 bool tempViewActive = false;
 void (*tempViewCallback)() = nullptr;
 
-const unsigned long TEMP_DISPLAY_TIME = 2000;  // milliseconds
+// Display timing defined in SystemConfig.h
 
 //menu display
 #include <Adafruit_GFX.h>
@@ -280,8 +280,8 @@ McpButtonHelper menuSelectButton;
 // KEYPAD
 // -----------------
 struct MatrixKeypad {
-  static const uint8_t ROWS = 4;
-  static const uint8_t COLS = 4;
+  static const uint8_t ROWS = KEYPAD_ROWS;
+  static const uint8_t COLS = KEYPAD_COLS;
 
   uint8_t rowPins[ROWS];
   uint8_t colPins[COLS];
@@ -349,9 +349,7 @@ const uint8_t ROW_PINS[4] = {MCP_KEYPAD_ROW1, MCP_KEYPAD_ROW2, MCP_KEYPAD_ROW3, 
 
 MatrixKeypad keypad;
 
-//debug stuff
-#define DEBUG
-#define ACTIVE_NOTES_DEBUG
+//debug flags defined in SystemConfig.h
 
 
 
@@ -364,44 +362,7 @@ MatrixKeypad keypad;
 ButtonHelper logButton;
 
 
-//useful macros
-#define BETWEEN(x, lo, hi) ((x) >= (lo) && (x) <= (hi))
-
-//constants
-const int MAX_PULSES_PER_STUTTER = 128;  //24 pulses -> 1 quarter note
-//This could be set as a function of MAX_PULSES_PER_STUTTER
-const int MAX_EVENTS = 4 * MAX_PULSES_PER_STUTTER;
-
-
-
-const byte BUFFER_FULL_LED_BLINK_TIME = 20;
-const byte BUFFER_FULL_LED_BLINK_COUNT = 4; //needs to be twice the number of blinks
-
-const float MIN_STRETCH_INTERVAL_UPDATE = 200;
-
-//this is used in a hypothetical drum machine helper for jittering between instruments
-const int MAX_INSTRUMENTS_PER_DRUM_MACHINE = 16;
-const int MAX_DRUM_MACHINES = 4;
-
-const byte JITTER_BUFFER_SIZE = 128;
-const byte DRUM_JITTER_BUFFER_SIZE = 128;
-const byte PERC_BUFFER_SIZE = 128;
-
-const byte RERETRIGGER_PROB = 50;
-const byte RETRIGGER_BUFFER_SIZE = 64;
-const byte RETRIGGER_SYNTH_TIME = 200;
-const byte RETRIGGER_DRUM_TIME = 50; //todo: make this different for drums and synths? 50 is fine for drums, too fast for synths.
-const byte RETRIGGER_NOTE_LENGTH = 50; //doesn't matter for drums, might for samples, does for synth
-
-// const byte PITCHBEND_PROB_PER_PULSE_10000 = 3; //note: this is x/100000, calculated once per clock pulse. 
-// at 1/100000, after four full notes the chance of at least one bend occurring is ~0.04.  At 10/100000, it's ~0.32.
-//these numbers were written for 1/10000
-
-const byte NUM_ACTIVE_PITCHBENDS = 4;
-// const bool PITCHBEND_ACTIVE = true;
-
-
-const byte MAX_DELAYED_NOTES = 128;
+//System configuration constants defined in SystemConfig.h
 
 
 // --- LED Pins ---
@@ -567,7 +528,7 @@ bool prevLooping = false;
 // Generic blink state variables (can be reused by other blink routines)
 unsigned long blinkStartTime = 0;
 int blinkStep = 0;
-const int blinkPatternLength = 5;
+const int blinkPatternLength = BLINK_PATTERN_LENGTH;  // Defined in SystemConfig.h
 bool isBlinking = false;
 
 
@@ -607,9 +568,7 @@ byte currentPulseInBar = 0;
 
 
 
-//misc constants & states
-const byte MIDI_NOOP = 0x00;
-const int DEBOUNCE_MS = 50;
+//misc constants defined in SystemConfig.h
 unsigned long lastStutterChange = 0;
 unsigned long lastButtonChangeTime = 0;
 MidiEvent dummyEvent;
@@ -702,8 +661,7 @@ byte velocityCoercionIdx = 0;
 //note that active notes tracking for 256 has been solved by isolating the MIDI in, but it's still
 //useful to have.
 #ifdef ACTIVE_NOTES_DEBUG
-//debug stuff
-const int MAX_NOTES = 256;
+//debug stuff - MAX_NOTES defined in SystemConfig.h
 //there's only 128 midi notes but we're erroneously seeing notes greater than that, so we need a buffer to handle those as well.
 bool activeNotes[MAX_NOTES] = { false };
 #endif
