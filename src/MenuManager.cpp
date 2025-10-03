@@ -245,7 +245,7 @@ void MenuManager::render() {
     if (currentMenu == MAIN_MENU) {
     // Main menu: list of menus
     // Add ptchbnd ~prob before Restore Defaults, and add Disable All as last item
-    const char* menus[14] = {"Note Jitter Prob", "Offset/Scale", "Drum Jitter Prob", "Retrigger Prob", "Retrigger Synth", "Random Drop Prob", "Delay Note Prob", "Stutter Length", "StutterTemperature", "delay times", "ptchbnd ~prob", "Channel Config", "Restore Defaults", "Disable All"};
+    const char* menus[15] = {"Note Jitter Prob", "Offset/Scale", "Drum Jitter Prob", "Retrigger Prob", "Retrigger Synth", "Random Drop Prob", "Delay Note Prob", "Stutter Length", "StutterTemperature", "delay times", "ptchbnd ~prob", "Channel Config", "Restore Defaults", "Disable All","Modify Channels"};
         int yStart = 10;
         tft.setTextSize(2);
         tft.setCursor(10, yStart);
@@ -255,7 +255,7 @@ void MenuManager::render() {
         // Main menu labels
         int itemIdx = mainMenuScrollIdx;
         int y = yStart;
-    for (int visible = 0; visible < MAIN_MENU_VISIBLE_ITEMS && itemIdx < 14; ++visible, ++itemIdx) {
+    for (int visible = 0; visible < MAIN_MENU_VISIBLE_ITEMS && itemIdx < 15; ++visible, ++itemIdx) {
             tft.setCursor(20, y + 30);
             if (mainMenuSelectedIdx == itemIdx) {
                 tft.setTextColor(ST77XX_BLACK, ST77XX_WHITE);
@@ -533,20 +533,25 @@ else{
         tft.print("channel modify");
         tft.setTextSize(1);
         tft.setCursor(10,40);
+        if(channelModifyVerticalIdx==0){tft.setTextColor(ST77XX_BLACK, ST77XX_WHITE);}
+        else{tft.setTextColor(ST77XX_WHITE, ST77XX_BLACK);}
         tft.print("...");
         //instructions at bottom
         tft.setCursor(10,120);
-        tft.setTextColor(ST77XX_YELLOW);
+        tft.setTextColor(ST77XX_YELLOW,ST77XX_BLACK);
         tft.print("Select to cycle, exit to save");
 
-        //print in upper right corner the current channel (channelModifyHorizontalIdx+1)
-        tft.setCursor(160, 10);
-        tft.setTextColor(ST77XX_MAGENTA);
-        tft.print(channelModifyHorizontalIdx + 1);
-
-        // Number in middle, always cyan
         tft.setTextSize(3);
-        tft.setCursor(40, 80);
+        // print channel
+        tft.setTextColor(ST77XX_MAGENTA);
+        tft.setCursor(40,80);
+        tft.print("[");
+        tft.setCursor(40+18,80);
+        tft.print(channelModifyHorizontalIdx + 1);
+        tft.setCursor(40+(18*3),80);
+        tft.print("]: ");
+        // Number in middle, always cyan
+        tft.setCursor(40+(18*6), 80);
         tft.setTextColor(ST77XX_CYAN, ST77XX_BLACK);
         switch (currentModifyOption) {
             case S:
@@ -1031,19 +1036,26 @@ void MenuManager::setChannelModifyOption() {
         if(drumMIDIenabled[channelModifyHorizontalIdx]){
             //and D
             currentModifyOption = S_D;
+            Serial.println("set to S_D");
         }
         else{
             currentModifyOption=S;
-        }
-        //not S
-        if(drumMIDIenabled[channelModifyHorizontalIdx]){
-            currentModifyOption = D;
-        }
-        else{
-            currentModifyOption = NONE;
+            Serial.println("set to S");
         }
     }
+    else{
+    //not S
+    if(drumMIDIenabled[channelModifyHorizontalIdx]){
+        currentModifyOption = D;
+        Serial.println("set to D");
     }
+    else{
+        currentModifyOption = NONE;
+        Serial.println("set to NONE");
+    }
+
+    }
+}
 
 
 
@@ -1072,6 +1084,10 @@ void MenuManager::channelModifyMenuRight(){
         channelModifyHorizontalIdx = (channelModifyHorizontalIdx + 1) % CHANNEL_MODIFY_TOTAL_ITEMS;
     setChannelModifyOption();
     }
+    Serial.print("Ch:");
+    Serial.print(channelModifyHorizontalIdx+1);
+    Serial.print(" Opt:");
+    Serial.println(static_cast<int>(currentModifyOption));
 }
 void MenuManager::channelModifyMenuSelect(){
     if(channelModifyVerticalIdx==0){
