@@ -18,7 +18,8 @@ const MenuHandlers menuHandlersTable[] = {
     { &MenuManager::retriggerSynthMenuUp, & MenuManager::retriggerSynthMenuDown, & MenuManager::retriggerSynthMenuLeft, & MenuManager::retriggerSynthMenuRight, & MenuManager::retriggerSynthMenuSelect }, // RETRIGGER_SYNTH_MENU
     { &MenuManager::pitchbendProbMenuUp, & MenuManager::pitchbendProbMenuDown, & MenuManager::pitchbendProbMenuLeft, & MenuManager::pitchbendProbMenuRight, & MenuManager::pitchbendProbMenuSelect }, // PITCHBEND_PROB_MENU
     { &MenuManager::delayTimesMenuUp, & MenuManager::delayTimesMenuDown, & MenuManager::delayTimesMenuLeft, & MenuManager::delayTimesMenuRight, & MenuManager::delayTimesMenuSelect }, // DELAY_TIMES_MENU
-    };
+    { &MenuManager::channelModifyMenuUp, & MenuManager::channelModifyMenuDown, & MenuManager::channelModifyMenuLeft, & MenuManager::channelModifyMenuRight, & MenuManager::channelModifyMenuSelect }, // CHANNEL_MODIFY_MENU
+};
 
 void MenuManager::saveStutterLength(int eepromAddr) {
     EEPROM.write(EEPROM_ADDR_MAGIC, EEPROM_MAGIC);
@@ -91,6 +92,51 @@ void MenuManager::saveMaxDelayTime(int eepromAddr){
     EEPROM.put(eepromAddr, maxDelayTime);
     Serial.print("saveMaxDelayTime called, value: ");
     Serial.println(maxDelayTime);
+}
+
+void MenuManager::saveDrumState(int eepromAddr) {
+    newDrumState = 0;
+    for (int i = 0; i < 16; i++) {
+        bool channelState = drumMIDIenabled[i];
+        if (channelState) {
+            newDrumState |= (1 << i);
+        } else {
+            newDrumState &= ~(1 << i);  // clear bit if switch is off
+        }
+    }
+    if(newDrumState!=oldDrumState){
+        EEPROM.write(EEPROM_ADDR_MAGIC, EEPROM_MAGIC);
+        EEPROM.put(eepromAddr, newDrumState);
+        oldDrumState = newDrumState;
+        Serial.print("saveDrumState called, value: ");
+        Serial.println(newDrumState);
+        redrawSDMatrix = true;
+    }
+}
+
+void MenuManager::saveSynthState(int eepromAddr) {
+    newSynthState = 0;
+    for (int i = 0; i < 16; i++) {
+        bool channelState = synthMIDIenabled[i];
+        if (channelState) {
+            newSynthState |= (1 << i);
+        } else {
+            newSynthState &= ~(1 << i);  // clear bit if switch is off
+        }
+    }
+    if(newSynthState!=oldSynthState){
+        EEPROM.write(EEPROM_ADDR_MAGIC, EEPROM_MAGIC);
+        EEPROM.put(eepromAddr, newSynthState);
+        oldSynthState = newSynthState;
+        Serial.print("saveSynthState called, value: ");
+        Serial.println(newSynthState);
+        redrawSDMatrix = true;
+    }
+}
+
+void MenuManager::saveChannelStates() {
+    saveDrumState(EEPROM_ADDR_DRUM_STATE);
+    saveSynthState(EEPROM_ADDR_SYNTH_STATE);
 }
 
 MenuManager::MenuManager(Adafruit_ST7789& display) : tft(display), currentMenu(MAIN_MENU) {
@@ -193,6 +239,7 @@ void MenuManager::handlePitchbendProbKeypad(char key) {
     }
     // Ignore other keys
 }
+
 
 void MenuManager::render() {
     if (currentMenu == MAIN_MENU) {
@@ -478,6 +525,50 @@ else{
     tft.setCursor(10, 120);
     tft.print("you must exit to save");
     }
+    else if (currentMenu == CHANNEL_MODIFY_MENU){
+        tft.fillScreen(ST77XX_BLACK);
+        tft.setTextSize(2);
+        tft.setTextColor(ST77XX_WHITE);
+        tft.setCursor(10, 10);
+        tft.print("channel modify");
+        tft.setTextSize(1);
+        tft.setCursor(10,40);
+        tft.print("...");
+        //instructions at bottom
+        tft.setCursor(10,120);
+        tft.setTextColor(ST77XX_YELLOW);
+        tft.print("Select to cycle, exit to save");
+
+        //print in upper right corner the current channel (channelModifyHorizontalIdx+1)
+        tft.setCursor(160, 10);
+        tft.setTextColor(ST77XX_MAGENTA);
+        tft.print(channelModifyHorizontalIdx + 1);
+
+        // Number in middle, always cyan
+        tft.setTextSize(3);
+        tft.setCursor(40, 80);
+        tft.setTextColor(ST77XX_CYAN, ST77XX_BLACK);
+        switch (currentModifyOption) {
+            case S:
+                // Handle S case
+                tft.print("S");
+                break;
+            case D:
+                // Handle D case
+                tft.print("D");
+                break;
+            case S_D:
+                // Handle S_D case
+                tft.print("D/S");
+                break;
+            case NONE:
+            tft.print("-");
+                break;
+            default:
+                tft.print("?");
+                break;
+        }
+    }
 }
 
 
@@ -561,7 +652,7 @@ void MenuManager::mainMenuUp() {
     }
 }
 void MenuManager::mainMenuDown() {
-    if (mainMenuSelectedIdx < 13) { // 14 items, idx 0-13
+    if (mainMenuSelectedIdx < 14) { // 15 items, idx 0-14
         mainMenuSelectedIdx++;
         if (mainMenuSelectedIdx > mainMenuScrollIdx + MAIN_MENU_VISIBLE_ITEMS - 1) {
             mainMenuScrollIdx = mainMenuSelectedIdx - MAIN_MENU_VISIBLE_ITEMS + 1;
@@ -631,6 +722,10 @@ void MenuManager::mainMenuSelect() {
             break;
         case 13:
             readyToDisableAll = true;
+            break;
+        case 14:
+            currentMenu = CHANNEL_MODIFY_MENU;
+            channelModifyVerticalIdx = 0;
             break;
         default:
             break;
@@ -928,4 +1023,84 @@ void MenuManager::delayTimesMenuSelect() {
         currentMenu = MAIN_MENU;
     }
     // else: do nothing for other selections
+}
+
+void MenuManager::setChannelModifyOption() {
+    if(synthMIDIenabled[channelModifyHorizontalIdx]){
+        //S
+        if(drumMIDIenabled[channelModifyHorizontalIdx]){
+            //and D
+            currentModifyOption = S_D;
+        }
+        else{
+            currentModifyOption=S;
+        }
+        //not S
+        if(drumMIDIenabled[channelModifyHorizontalIdx]){
+            currentModifyOption = D;
+        }
+        else{
+            currentModifyOption = NONE;
+        }
+    }
+    }
+
+
+
+
+void MenuManager::channelConfigMenuDown(){
+    if(channelModifyVerticalIdx==0){
+        channelModifyVerticalIdx = 1;
+        setChannelModifyOption();
+        redrawSDMatrix = true;
+    };
+}
+void MenuManager::channelConfigMenuUp(){
+    if(channelModifyVerticalIdx>0){
+        channelModifyVerticalIdx = 0;
+    };
+}
+void MenuManager::channelConfigMenuLeft(){
+    if(channelModifyVerticalIdx>0){
+        channelModifyHorizontalIdx = (channelModifyHorizontalIdx - 1) % CHANNEL_MODIFY_TOTAL_ITEMS;
+    setChannelModifyOption();
+    }   
+}
+
+void MenuManager::channelConfigMenuRight(){
+    if(channelModifyVerticalIdx>0){
+        channelModifyHorizontalIdx = (channelModifyHorizontalIdx + 1) % CHANNEL_MODIFY_TOTAL_ITEMS;
+    setChannelModifyOption();
+    }
+}
+void MenuManager::channelConfigMenuSelect(){
+    if(channelModifyVerticalIdx==0){
+        //must exit to save
+        saveChannelStates();
+        currentMenu = MAIN_MENU;
+    }
+    else{
+        //cycle through the enum
+        currentModifyOption = static_cast<ChannelModifyItems>((static_cast<int>(currentModifyOption) + 1) % NUM_CHANNEL_MODIFY_ITEMS);
+        //set the booleans based on the enum
+        switch(currentModifyOption){
+            case NONE:
+                synthMIDIenabled[channelModifyHorizontalIdx] = false;
+                drumMIDIenabled[channelModifyHorizontalIdx] = false;
+                break;
+            case S:
+                synthMIDIenabled[channelModifyHorizontalIdx] = true;
+                drumMIDIenabled[channelModifyHorizontalIdx] = false;
+                break;
+            case D:
+                synthMIDIenabled[channelModifyHorizontalIdx] = false;
+                drumMIDIenabled[channelModifyHorizontalIdx] = true;
+                break;
+            case S_D:
+                synthMIDIenabled[channelModifyHorizontalIdx] = true;
+                drumMIDIenabled[channelModifyHorizontalIdx] = true;
+                break;
+        }
+        redrawSDMatrix = true;
+    }
 }

@@ -33,8 +33,18 @@ enum MenuState {
     STUTTER_TEMPERATURE_MENU,
     RETRIGGER_SYNTH_MENU,
     PITCHBEND_PROB_MENU,
-    DELAY_TIMES_MENU
+    DELAY_TIMES_MENU,
+    CHANNEL_MODIFY_MENU
 };
+
+enum ChannelModifyItems {
+    S,
+    D,
+    S_D,
+    NONE,
+    NUM_CHANNEL_MODIFY_ITEMS
+};
+
 // Offset sets and labels
 struct OffsetSet {
     const byte* offsets;
@@ -210,6 +220,14 @@ public:
     void delayTimesMenuRight();
     void delayTimesMenuSelect();
 
+    // Handler functions for CHANNEL_MODIFY_MENU
+    void setChannelModifyOption();
+    void channelModifyMenuUp();
+    void channelModifyMenuDown();
+    void channelModifyMenuLeft();
+    void channelModifyMenuRight();
+    void channelModifyMenuSelect();
+
     MenuState currentMenu;
     // Flag for requesting channel defaults reset
     bool pendingChannelDefaultsReset = false;
@@ -229,6 +247,9 @@ public:
     void savePitchbendProb(int eepromAddr);
     void saveMinDelayTime(int eepromAddr);
     void saveMaxDelayTime(int eepromAddr);
+    void saveDrumState(int eepromAddr);
+    void saveSynthState(int eepromAddr);
+    void saveChannelStates();
     // Flag to request restoreDefaults from main loop
     bool readyToRestoreDefaults = false;
     bool readyToDisableAll = false;
@@ -288,6 +309,33 @@ public:
 
     bool pendingSynthChannelUpdate = false;
     bool pendingDrumChannelUpdate = false;
+
+    byte channelModifyHorizontalIdx = 0; // 0>1,  channels 1-16
+    byte channelModifyVerticalIdx = 0;
+    byte currentModifyOption = NONE; // 0=S, 1=2, 2=S_D, 3=NONE
+
+    static const int CHANNEL_MODIFY_TOTAL_ITEMS = 16; // 1 for '...',
+
+    bool drumMIDIenabled[16]  = {
+        false, false, false, false,
+        false, false, false, false,
+        false, true, true, false,
+        false, false, false, false
+        };
+
+    bool synthMIDIenabled[16]=  {
+    true, true, true, true,
+    true, true, true, true,
+    true, false, false, true,
+    true, true, false, false
+    };
+
+    uint16_t oldSynthState = 0;
+    uint16_t newSynthState = 0;
+    uint16_t oldDrumState = 0;
+    uint16_t newDrumState = 0;
+
+    bool redrawSDMatrix = false;
 
     void mainMenuUp();
     void mainMenuDown();

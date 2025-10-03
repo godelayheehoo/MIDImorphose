@@ -78,6 +78,7 @@
 //non-null defaults?
 //then maybe add an "everything off" menu option in addition to reset defaults?
 
+//retriggering probably should send notes off, so we actually get the envelope to reset etc. Not sure if it does that right now. 
 
 #include "NoteStructs.h"
 #include "SortedBuffer.h"
@@ -507,10 +508,7 @@ bool prevStutterPressed = false;
 // --- Dipswitch states ---
 //these encode the midi dipswitch states
 // uint16_t oldDrumState = 0;
-uint16_t oldSynthState = 0;
-uint16_t newSynthState = 0;
-uint16_t oldDrumState = 0;
-uint16_t newDrumState = 0;
+
 
 
 // --- Pot States --- 
@@ -562,18 +560,8 @@ const uint8_t midiPins[16] = {
 //these are stored in eeprom, so this only matters if EEPROM fails.
 //specifically, these are the defaults used in the "memory failed" and "reset to defaults"
 //code.  These arrays aren't directly called though, but we should refactor so that they are.
-bool drumMIDIenabled[16]  = {
-  false, false, false, false,
-  false, false, false, false,
-  false, true, true, false,
-  false, false, false, false
-};
-bool synthMIDIenabled[16]=  {
-  true, true, true, true,
-  true, true, true, true,
-  true, false, false, true,
-  true, true, false, false
-};
+
+
 
 //one per pulse
 byte velocityCoerceValues[10][16] = {
@@ -716,7 +704,7 @@ bool checkIfMIDIOn(byte channel_num){
   if(channel_num>16){
     Serial.println(F("Got invalid channel!")); 
     return false;}
-  return drumMIDIenabled[channel_num-1]||synthMIDIenabled[channel_num-1];
+  return menu.drumMIDIenabled[channel_num-1]||menu.synthMIDIenabled[channel_num-1];
 }
 
 void killTrackedChannelsNotes(){
@@ -796,8 +784,8 @@ void restoreDefaults() {
     drumState = 0;
     synthState = 0;
     for (int i = 0; i < 16; i++) {
-      drumMIDIenabled[i] = drumDefaults[i];
-      synthMIDIenabled[i] = synthDefaults[i];
+      menu.drumMIDIenabled[i] = drumDefaults[i];
+      menu.synthMIDIenabled[i] = synthDefaults[i];
       if (drumDefaults[i]) drumState |= (1 << i);
       if (synthDefaults[i]) synthState |= (1 << i);
     }
@@ -841,8 +829,8 @@ void disableAll() {
     drumState = 0;
     synthState = 0;
     for (int i = 0; i < 16; i++) {
-      drumMIDIenabled[i] = drumDefaults[i];
-      synthMIDIenabled[i] = synthDefaults[i];
+      menu.drumMIDIenabled[i] = drumDefaults[i];
+      menu.synthMIDIenabled[i] = synthDefaults[i];
       if (drumDefaults[i]) drumState |= (1 << i);
       if (synthDefaults[i]) synthState |= (1 << i);
     }
@@ -1080,11 +1068,11 @@ void setup() {
 
   // Decode drumMIDIenabled and synthMIDIenabled arrays
   for (int i = 0; i < 16; i++) {
-    drumMIDIenabled[i] = (drumState & (1 << i)) ? true : false;
-    synthMIDIenabled[i] = (synthState & (1 << i)) ? true : false;
+    menu.drumMIDIenabled[i] = (drumState & (1 << i)) ? true : false;
+    menu.synthMIDIenabled[i] = (synthState & (1 << i)) ? true : false;
   }
   Serial.println(F("Drawing SD matrix again (why?)"));
-  drawSDMatrix(drumMIDIenabled, synthMIDIenabled); 
+  drawSDMatrix(menu.drumMIDIenabled, menu.synthMIDIenabled); 
   oldPulseResolution = menu.pulseResolution;
   // To save a setting after it changes, use:
   // EEPROM.write(EEPROM_ADDR_MAGIC, EEPROM_MAGIC);
@@ -1131,6 +1119,7 @@ void loop() {
         //we still only append to the events buffer if we're tracking that midi channel, we still only forward
         //if we're not looping or not on a tracked channel. 
         //So what we'll do is always create a note 
+        //note this if check is redundant with the one above. 
         if (type == midi::NoteOn || type == midi::NoteOff) {
           byte note = MIDIrx.getData1();
           byte velocity = MIDIrx.getData2();
@@ -1230,7 +1219,7 @@ void loop() {
           //if it's a drum machine, maybe learn the new note/instrument
           
           // todo: combine the jitter on check?
-          if(type==midi::NoteOn && drumMIDIenabled[channel-1] && jitterOn){
+          if(type==midi::NoteOn && menu.drumMIDIenabled[channel-1] && jitterOn){
             //maybe learn the instrument
             maybeLearnInstrument(channel, note);
             //now maybe drum jitter the note
@@ -1240,7 +1229,7 @@ void loop() {
           //we can probably consolidate some of these conditionals at some point.
           //maybe jitter the note
           //we adjust for both note on and note off in case later glitches care about note off (though that is unlikely).
-          if(jitterOn && synthMIDIenabled[channel-1]){
+          if(jitterOn && menu.synthMIDIenabled[channel-1]){
           newEvent = maybeNoteNumberJitter(newEvent);  
           //note the jittered note does get sent to the buffer -- change from before, which jittered within the buffer. (so now if we jitter 46->48, we stutter the 48 each time)
           }
@@ -1263,7 +1252,7 @@ void loop() {
               // Serial.println(newEvent.velocity);
               eventsBuffer.push(newEvent);
 
-              if(retriggerOn && drumMIDIenabled[channel-1] || (synthMIDIenabled[channel-1] && menu.retriggerSynths)){
+              if(retriggerOn && menu.drumMIDIenabled[channel-1] || (menu.synthMIDIenabled[channel-1] && menu.retriggerSynths)){
               //retrigger cue logic -- works on both synth and drum currently
               if(randomProbResult(menu.retriggerProb)){
                   // Serial.println("Cued a retrigger note");
@@ -1325,7 +1314,7 @@ void loop() {
   if(menu.pitchbendProb>0){
     //maybe create a new pitchbender
     if(randomProbResult(menu.pitchbendProb, 100000)){
-      byte bendChannel = getRandomActiveChannel(synthMIDIenabled);
+      byte bendChannel = getRandomActiveChannel(menu.synthMIDIenabled);
       if(bendChannel!=255){
       pushBend(bendChannel);
       }
@@ -1472,6 +1461,7 @@ if(velocityCoercionSwitch.update()){
   stutterButtonPressed = readStutterButton();
   
 
+  //todo: remove
   if(menu.pendingDrumChannelUpdate){
     Serial.println(F("Drum button pressed!"));
     updateDrumSwitches();
@@ -1483,6 +1473,11 @@ if(velocityCoercionSwitch.update()){
     menu.pendingSynthChannelUpdate=false;
   }
 
+  if(menu.redrawSDMatrix){
+    drawSDMatrix(menu.drumMIDIenabled, menu.synthMIDIenabled);
+    menu.redrawSDMatrix = false;
+  }
+
   // Handle menu-driven reset to default for channel config
   if(menu.pendingChannelDefaultsReset) {
     Serial.println(F("Resetting channel config to defaults!"));
@@ -1492,8 +1487,8 @@ if(velocityCoercionSwitch.update()){
     drumState = 0;
     synthState = 0;
     for (int i = 0; i < 16; i++) {
-      drumMIDIenabled[i] = drumDefaults[i];
-      synthMIDIenabled[i] = synthDefaults[i];
+      menu.drumMIDIenabled[i] = drumDefaults[i];
+      menu.synthMIDIenabled[i] = synthDefaults[i];
       if (drumDefaults[i]) drumState |= (1 << i);
       if (synthDefaults[i]) synthState |= (1 << i);
     }
@@ -1502,7 +1497,7 @@ if(velocityCoercionSwitch.update()){
     EEPROM.put(EEPROM_ADDR_DRUM_STATE, drumState);
     EEPROM.put(EEPROM_ADDR_SYNTH_STATE, synthState);
     Serial.println(F("Channel config defaults saved to EEPROM."));
-    drawSDMatrix(drumMIDIenabled, synthMIDIenabled);
+    drawSDMatrix(menu.drumMIDIenabled, menu.synthMIDIenabled);
     menu.pendingChannelDefaultsReset = false;
   }
 
@@ -1635,7 +1630,7 @@ if (panicButton.update()) {
     //copy events buffer to stutter buffer
     numSynthNoteOnsInStutterBuffer = 0;
     for(unsigned int i =0; i<stutterBuffer.size(); i++){
-      if(stutterBuffer[i].type==midi::NoteOn && synthMIDIenabled[stutterBuffer[i].channel-1]){
+      if(stutterBuffer[i].type==midi::NoteOn && menu.synthMIDIenabled[stutterBuffer[i].channel-1]){
         numSynthNoteOnsInStutterBuffer++;
       }
     }
@@ -1785,7 +1780,7 @@ if(logButton.update()){
   //update temporary view
   if (tempViewActive && millis() - tempViewStartTime > TEMP_DISPLAY_TIME) {
     tempViewActive = false;
-    drawSDMatrix(drumMIDIenabled, synthMIDIenabled);  // restore SD matrix view
+    drawSDMatrix(menu.drumMIDIenabled, menu.synthMIDIenabled);  // restore SD matrix view
 }
 
 }
@@ -2000,7 +1995,7 @@ void startBufferFullBlink() {
 
 bool maybeLearnDrumMachine(byte channel){
   //first, check if this is even a drum machine
-  if(!drumMIDIenabled[channel-1]){
+  if(!menu.drumMIDIenabled[channel-1]){
     return false;
   }
   // then, check if this channel is already learned
@@ -2024,7 +2019,7 @@ bool maybeLearnDrumMachine(byte channel){
 }
 
 bool maybeLearnInstrument(byte channel, byte notenumber){
-  if(!drumMIDIenabled[channel-1]){
+  if(!menu.drumMIDIenabled[channel-1]){
     return false;
   }
   // Find or create the drum machine for this channel
@@ -2074,7 +2069,7 @@ bool maybeLearnInstrument(byte channel, byte notenumber){
 void refreshDrumMachines() {
   //first, we remove all non-drum machines.  Then we try to learn all the drum machines in order
   for(int i = 0; i < numDrumMachines; i++) {
-    if (!drumMIDIenabled[drumMachines[i].channel - 1]) {
+    if (!menu.drumMIDIenabled[drumMachines[i].channel - 1]) {
       // This channel is no longer a drum machine, remove it
       Serial.print("Forgetting drum machine on channel ");
       Serial.println(drumMachines[i].channel);
@@ -2330,7 +2325,7 @@ void cueRetriggeredNote(MidiEvent me){
           rEvent.velocity = me.velocity;
           //note this means that if it's a synth & drum, it uses the synth time. 
           int retriggerTime;
-          if(drumMIDIenabled[me.channel-1]){
+          if(menu.drumMIDIenabled[me.channel-1]){
              retriggerTime = RETRIGGER_DRUM_TIME;
           }
           else{
@@ -2451,11 +2446,11 @@ MidiEvent maybePercolateNote(MidiEvent event, byte index_number){
   }
 
   //if a non-qualifying event, exit right away  Note this shouldn't get hit by noteoffs..
-  if(event.type != midi::NoteOn || !synthMIDIenabled[event.channel - 1]) {
+  if(event.type != midi::NoteOn || !menu.synthMIDIenabled[event.channel - 1]) {
     return event;}
 
   //only do this for note on events for now (TODO: eugh, going to have to change note offs)
-  if(event.type == midi::NoteOn && synthMIDIenabled[event.channel - 1]){
+  if(event.type == midi::NoteOn && menu.synthMIDIenabled[event.channel - 1]){
     int random_step_count = random(0, menu.stutterTemperature);
     //cap random_step_count to numSynthNoteOnsInStutterBuffer-1  . Use mod for more variatoin. 
     if(random_step_count >= numSynthNoteOnsInStutterBuffer) {
@@ -2475,7 +2470,7 @@ MidiEvent maybePercolateNote(MidiEvent event, byte index_number){
     while(steps_taken<random_step_count&&maxSteps--){
       //we walk through stutterBuffer in the direction, we only count synth events.
       working_index = (working_index + stutterBuffer.size() + direction) % stutterBuffer.size();
-      if(synthMIDIenabled[stutterBuffer[working_index].channel-1] && stutterBuffer[working_index].type==midi::NoteOn){
+      if(menu.synthMIDIenabled[stutterBuffer[working_index].channel-1] && stutterBuffer[working_index].type==midi::NoteOn){
         steps_taken++;
     }
   }
@@ -2556,7 +2551,6 @@ void recoverStatusDisplay() {
 
 
 
-
 void drawSDMatrix(bool drumArr[16], bool synthArr[16]) {
   statusDisplay.clearDisplay();
   statusDisplay.setTextColor(SSD1306_WHITE);
@@ -2622,44 +2616,45 @@ void drawSDMatrix(bool drumArr[16], bool synthArr[16]) {
   // safeDisplayUpdate();
 }
 
+//todo: remove
 void updateSynthSwitches(){
-newSynthState = 0;
+menu.newSynthState = 0;
 for (int i = 0; i < 16; i++) {
   bool channelState = (mcpMIDI.digitalRead(midiPins[i]) == LOW);
-  synthMIDIenabled[i] = channelState;
+  menu.synthMIDIenabled[i] = channelState;
   if (channelState) {
-    newSynthState |= (1 << i);
+    menu.newSynthState |= (1 << i);
   } else {
-    newSynthState &= ~(1 << i);  // clear bit if switch is off
+    menu.newSynthState &= ~(1 << i);  // clear bit if switch is off
   }
 }
-if (newSynthState != oldSynthState) {
-  oldSynthState = newSynthState;
-  drawSDMatrix(drumMIDIenabled, synthMIDIenabled);  // you can update arrays too if needed
+if (menu.newSynthState != menu.oldSynthState) {
+  menu.oldSynthState = menu.newSynthState;
+  drawSDMatrix(menu.drumMIDIenabled, menu.synthMIDIenabled);  // you can update arrays too if needed
   // Save newSynthState to EEPROM as uint16_t
   EEPROM.write(EEPROM_ADDR_MAGIC, EEPROM_MAGIC); // Write magic byte
-  EEPROM.put(EEPROM_ADDR_SYNTH_STATE, newSynthState);
+  EEPROM.put(EEPROM_ADDR_SYNTH_STATE, menu.newSynthState);
   Serial.println("Wrote synth state to EEPROM");
 }
 }
 
 void updateDrumSwitches(){
-newDrumState = 0;
+menu.newDrumState = 0;
 for (int i = 0; i < 16; i++) {
   bool channelState = (mcpMIDI.digitalRead(midiPins[i]) == LOW);
-  drumMIDIenabled[i] = channelState;
+  menu.drumMIDIenabled[i] = channelState;
   if (channelState) {
-    newDrumState |= (1 << i);
+    menu.newDrumState |= (1 << i);
   } else {
-    newDrumState &= ~(1 << i);  // clear bit if switch is off
+    menu.newDrumState &= ~(1 << i);  // clear bit if switch is off
   }
 }
-if (newDrumState != oldDrumState) {
-  oldDrumState = newDrumState;
-  drawSDMatrix(drumMIDIenabled, synthMIDIenabled);  // you can update arrays too if needed
+if (menu.newDrumState != menu.oldDrumState) {
+  menu.oldDrumState = menu.newDrumState;
+  drawSDMatrix(menu.drumMIDIenabled, menu.synthMIDIenabled);  // you can update arrays too if needed
   // Save newDrumState to EEPROM as uint16_t
   EEPROM.write(EEPROM_ADDR_MAGIC, EEPROM_MAGIC); // Write magic byte
-  EEPROM.put(EEPROM_ADDR_DRUM_STATE, newDrumState);
+  EEPROM.put(EEPROM_ADDR_DRUM_STATE, menu.newDrumState);
   Serial.println("Wrote drum state to EEPROM");
 }
 Serial.println("Refreshing drum machines...");
