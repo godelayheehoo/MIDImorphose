@@ -1048,32 +1048,32 @@ void MenuManager::setChannelModifyOption() {
 
 
 
-void MenuManager::channelConfigMenuDown(){
+void MenuManager::channelModifyMenuDown(){
     if(channelModifyVerticalIdx==0){
         channelModifyVerticalIdx = 1;
         setChannelModifyOption();
         redrawSDMatrix = true;
     };
 }
-void MenuManager::channelConfigMenuUp(){
+void MenuManager::channelModifyMenuUp(){
     if(channelModifyVerticalIdx>0){
         channelModifyVerticalIdx = 0;
     };
 }
-void MenuManager::channelConfigMenuLeft(){
+void MenuManager::channelModifyMenuLeft(){
     if(channelModifyVerticalIdx>0){
         channelModifyHorizontalIdx = (channelModifyHorizontalIdx - 1) % CHANNEL_MODIFY_TOTAL_ITEMS;
     setChannelModifyOption();
     }   
 }
 
-void MenuManager::channelConfigMenuRight(){
+void MenuManager::channelModifyMenuRight(){
     if(channelModifyVerticalIdx>0){
         channelModifyHorizontalIdx = (channelModifyHorizontalIdx + 1) % CHANNEL_MODIFY_TOTAL_ITEMS;
     setChannelModifyOption();
     }
 }
-void MenuManager::channelConfigMenuSelect(){
+void MenuManager::channelModifyMenuSelect(){
     if(channelModifyVerticalIdx==0){
         //must exit to save
         saveChannelStates();
