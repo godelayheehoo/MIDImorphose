@@ -111,6 +111,7 @@ The TFT display provides a visual menu system for configuration and navigation. 
   - Delay Times (min/max)
   - Restore Defaults
   - Disable All
+  - Channel Modify
 
 - **Menu 1 / Menu 2:**
   - Leftover menus from initial development I haven't removed yet. 
@@ -118,8 +119,8 @@ The TFT display provides a visual menu system for configuration and navigation. 
 - **Note Jitter / Drum Jitter / Retrigger / Random Drop / Delay Note / Pitchbend Probability / Stutter Temperature Menus:**
   - Enter probability or value using the keypad. Press `#` to confirm, `*` to clear input. Only the '...' option is selectable; pressing select returns to the main menu.
 
-- **Channel Config Menu:**
-  - Select “set drum channels” or “set synth channels” to confirm dipswitch assignments. Can also reset to default channel assignments. s
+- **Channel Config Menu [deprecated]:**
+  - Select “set drum channels” or “set synth channels” to confirm dipswitch assignments. Can also reset to default channel assignments. This will be removed in the next hardware edition.
 
 - **Stutter Length Menu:**
   - Select from 16 different pulse resolutions (e.g., 1/32 note, 1/16 triplet, 1/4 note, etc.).
@@ -159,6 +160,10 @@ The TFT display provides a visual menu system for configuration and navigation. 
 - **Disable All**
   - Sets all probabilities to 0 and disables optional functions.
 
+- **Channel Modify**
+  - Sets each channel to Synth, Drum, Synth/Drum, or None.  This will fully replace the dipswitches
+  in the next hardware edition.
+  
 **Navigation:**
 - Use the control pad/buttons to move between menu items and select options.
   - Up/Down: Move selection

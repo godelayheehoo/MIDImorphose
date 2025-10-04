@@ -67,7 +67,8 @@
 //this can be done outside of the midi read loop, so it should be fast.
 
 //I like overall velocity coercion I think.  I have it resetting currentPulseInBar to 0 on start/continue, so it should be fine.
-//should I also reset on new switch activations so it's possible to get "off"?
+//should I also reset on new switch activations so it's possible to get "off"? Could also have a manual sync button? 
+//just use the keypad, there's still two fre letters
 
 //instead of cycling, should I have the groove selectable via menu?
 
@@ -75,10 +76,11 @@
 //reorganize menus, order and maybe even sub menus
 //synth swapping-- any active synth channel? If incorporated into jitter, you'd have to change the jitter tracking
 //I don't want to add another button-- also basically impossible at this point.
-//non-null defaults?
-//then maybe add an "everything off" menu option in addition to reset defaults?
+
 
 //retriggering probably should send notes off, so we actually get the envelope to reset etc. Not sure if it does that right now. 
+
+//TODO: remove Config Channels menu, move channel modify menu up, physically remove dipswitches.
 
 #include "NoteStructs.h"
 #include "SortedBuffer.h"

@@ -731,6 +731,7 @@ void MenuManager::mainMenuSelect() {
         case 14:
             currentMenu = CHANNEL_MODIFY_MENU;
             channelModifyVerticalIdx = 0;
+            setChannelModifyOption();
             break;
         default:
             break;
