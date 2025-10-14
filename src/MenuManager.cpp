@@ -678,7 +678,7 @@ void MenuManager::mainMenuSelect() {
             break;
         case 1:
             currentMenu = OFFSET_MENU;
-            offsetSelectedIdx = 0;
+            offsetSelectedIdx = 0;  
             offsetScrollIdx = 0;
             break;
         case 2:
@@ -1120,4 +1120,22 @@ void MenuManager::channelModifyMenuSelect(){
         }
         redrawSDMatrix = true;
     }
+}
+
+void MenuManager::primaryJitterMenuDown() {
+    if(primaryJitterSelectedIdx > 0) primaryJitterSelectedIdx--;
+}
+
+void MenuManager::primaryJitterMenuUp() {
+    if(primaryJitterSelectedIdx < PRIMARY_JITTER_TOTAL_ITEMS - 1) primaryJitterSelectedIdx++;
+}
+
+void MenuManager::primaryJitterMenuLeft() {
+}
+
+void MenuManager::primaryJitterMenuRight() {   
+}
+
+void MenuManager::primaryJitterMenuSelect() {
+    
 }

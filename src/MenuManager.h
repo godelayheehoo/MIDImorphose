@@ -34,8 +34,11 @@ enum MenuState {
     RETRIGGER_SYNTH_MENU,
     PITCHBEND_PROB_MENU,
     DELAY_TIMES_MENU,
-    CHANNEL_MODIFY_MENU
+    CHANNEL_MODIFY_MENU,
+    PRIMARY_JITTER_MENU
 };
+
+
 
 enum ChannelModifyItems {
     S,
@@ -101,6 +104,8 @@ static const char* STUTTER_LENGTH_LABELS[NUM_STUTTER_LENGTH_OPTIONS] = {
     "1/32 note", "1/32 triplet", "1/16 note", "1/16 triplet", "dotted 1/16 note", "1/8 note", "5/32 note (odd)", "1/8 triplet", "dotted 1/8 note", "1/4 note", "1/4 triplet", "dotted 1/4 note", "1/2 note", "1/2 triplet", "dotted 1/2 note", "whole note"
 };
 
+const int PRIMARY_JITTER_TOTAL_ITEMS = 2;
+static const char* PRIMARY_JITTER_LABELS[PRIMARY_JITTER_TOTAL_ITEMS] = {"Note Jitter", "Drum Jitter"};
 
 enum MenuButton {
     BUTTON_NONE,
@@ -127,12 +132,12 @@ public:
     void handlePitchbendProbKeypad(char key); // For 
     
     void handleProbKeypad(
-    MenuState expectedMenu,
-    char key,
-    String& inputBuffer,
-    byte& probVar,
-    int eepromAddr
-);
+        MenuState expectedMenu,
+        char key,
+        String& inputBuffer,
+        byte& probVar,
+        int eepromAddr
+    );
 
     void renderProbabilityMenu(const char* title, const String& inputBuffer);
 
@@ -228,6 +233,13 @@ public:
     void channelModifyMenuRight();
     void channelModifyMenuSelect();
 
+    // Handler functions for PRIMARY_JITTER_MENU
+    void primaryJitterMenuUp();
+    void primaryJitterMenuDown();
+    void primaryJitterMenuLeft();
+    void primaryJitterMenuRight();
+    void primaryJitterMenuSelect();
+
     MenuState currentMenu;
     // Flag for requesting channel defaults reset
     bool pendingChannelDefaultsReset = false;
@@ -254,7 +266,6 @@ public:
     bool readyToRestoreDefaults = false;
     bool readyToDisableAll = false;
  
-public:
     Adafruit_ST7789& tft;
     // Main menu selection
     int mainMenuSelectedIdx = 0;
@@ -336,6 +347,9 @@ public:
     uint16_t newDrumState = 0;
 
     bool redrawSDMatrix = false;
+
+    byte primaryJitterSelectedIdx=0;
+
 
     void mainMenuUp();
     void mainMenuDown();

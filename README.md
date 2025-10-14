@@ -163,7 +163,7 @@ The TFT display provides a visual menu system for configuration and navigation. 
 - **Channel Modify**
   - Sets each channel to Synth, Drum, Synth/Drum, or None.  This will fully replace the dipswitches
   in the next hardware edition.
-  
+
 **Navigation:**
 - Use the control pad/buttons to move between menu items and select options.
   - Up/Down: Move selection
@@ -204,7 +204,7 @@ All menu selections and settings are saved to EEPROM for persistence across powe
 - Glitch effects, if enabled, are always "active"-- they do not track if the sequencer is playing.  Note that clock-based effects will not advance with no new clock pulses however. This means, for instance, that if velocity coercion is on, whatever velocity value is being used for coercion will be the velocity value all notes play at while the sequencer is paused. Jittering will still take effect, etc. 
 
 
-## Troubleshooting
+## Troubleshootings
 
 - If OLED fails to initialize, the program halts.
 - If buffer is full, LED blinks and oldest notes are dropped.
