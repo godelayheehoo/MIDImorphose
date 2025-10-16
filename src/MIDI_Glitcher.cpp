@@ -91,7 +91,6 @@
 #include <Arduino.h>
 #include <CircularBuffer.h>
 #include <Adafruit_MCP23X17.h>
-Adafruit_MCP23X17 mcpMIDI;
 Adafruit_MCP23X17 mcpControls;
 //midi stuff
 #include <MIDI.h>
@@ -548,22 +547,6 @@ bool haveSeenClock = false;
 uint16_t drumState = 0;
 uint16_t synthState = 0;
 
-//midi channels
-// Map MIDI channels 1–16 to pins (defined in PinDefinitions.h)
-const uint8_t midiPins[16] = {
-  MCP_MIDI_CH1,  MCP_MIDI_CH2,  MCP_MIDI_CH3,  MCP_MIDI_CH4,
-  MCP_MIDI_CH5,  MCP_MIDI_CH6,  MCP_MIDI_CH7,  MCP_MIDI_CH8,
-  MCP_MIDI_CH9,  MCP_MIDI_CH10, MCP_MIDI_CH11, MCP_MIDI_CH12,
-  MCP_MIDI_CH13, MCP_MIDI_CH14, MCP_MIDI_CH15, MCP_MIDI_CH16
-};
-// Array to track which channels are ON
-
-//todo: switch this to the two arrays below and a check on those.
-//these are stored in eeprom, so this only matters if EEPROM fails.
-//specifically, these are the defaults used in the "memory failed" and "reset to defaults"
-//code.  These arrays aren't directly called though, but we should refactor so that they are.
-
-
 
 //one per pulse
 byte velocityCoerceValues[10][16] = {
@@ -884,8 +867,6 @@ void triggerBufferFullBlink();
 void updateBufferFullBlink();
 void checkPulseBufferFullSetLED();
 
-void updateSynthSwitches();
-void updateDrumSwitches();
 
 void setupStatusDisplay();
 void drawSDMatrix(bool drumArr[16], bool synthArr[16]);
@@ -928,17 +909,21 @@ void showVelocityCoercionLabel();
 
 void setup() {
   // put your setup code here, to run once:
+  
+  // Blink LED to confirm Teensy is running (before serial init)
+  pinMode(LED_BUILTIN, OUTPUT);
+  for (int i = 0; i < 5; i++) {
+    digitalWrite(LED_BUILTIN, HIGH);
+    delay(200);
+    digitalWrite(LED_BUILTIN, LOW);
+    delay(200);
+  }
+  
   Serial.begin(115200);
 
   Serial.println(F("Starting setup"));
-    Serial.println(F("Setting up mcpMIDI"));
+  
   Wire2.begin();      
-  if (!mcpMIDI.begin_I2C(0x27, &Wire2)) {
-    Serial.println("MCP23017 not found on 0x27!");
-    for (;;);
-  }
-  Serial.println("MCP23017 on 0x27 initialized.");
-
      
   if (!mcpControls.begin_I2C(0x25, &Wire2)) {
     Serial.println("MCP23017 not found on 0x25!");
@@ -976,14 +961,6 @@ void setup() {
   
   MIDIrx.setHandleClock(handleClock);
 
-
-   //setup midi channels -- edit later for S&D arrays. This uses mcp pins
-  for (int i = 0; i < 16; i++) {
-       mcpMIDI.pinMode(midiPins[i], INPUT_PULLUP);
-      mcpMIDI.digitalWrite(midiPins[i], HIGH);
-  }
-
-
 //setup 7seg-- 0x0f is 15.
   seg7display.setBrightness(0x0f); 
 
@@ -998,7 +975,7 @@ void setup() {
   SPI1.begin();
   // Serial.println("Set up SPI1");
 
-  menuTft.init(135, 240);   // correct for 240x135 ST7789
+  menuTft.init(TFT_INIT_HEIGHT, TFT_INIT_WIDTH);   // Dimensions from SystemConfig.h
   menuTft.setRotation(3);   // landscape
   Serial.println("init screen");
 
@@ -1092,7 +1069,7 @@ void setup() {
 
 
 void loop() {
-  
+ 
   //first, we check to see if we got a clock message. If we did, we handle it and return. This still doesn't fix
   //the overwhelmed by notes problem.
   while(MIDIrx.read()){
@@ -1463,18 +1440,6 @@ if(velocityCoercionSwitch.update()){
   stutterButtonPressed = readStutterButton();
   
 
-  //todo: remove
-  if(menu.pendingDrumChannelUpdate){
-    Serial.println(F("Drum button pressed!"));
-    updateDrumSwitches();
-    menu.pendingDrumChannelUpdate=false;
-  }
-  if(menu.pendingSynthChannelUpdate){
-    Serial.println(F("Synth button pressed!"));
-    updateSynthSwitches();
-    menu.pendingSynthChannelUpdate=false;
-  }
-
   if(menu.redrawSDMatrix){
     drawSDMatrix(menu.drumMIDIenabled, menu.synthMIDIenabled);
     menu.redrawSDMatrix = false;
@@ -1540,7 +1505,7 @@ if (panicButton.update()) {
     SPI.end();            // tear down SPI
     delay(10);
     SPI.begin();          // reinit SPI
-    menuTft.init(135, 240);   // correct for 240x135 ST7789
+    menuTft.init(TFT_INIT_HEIGHT, TFT_INIT_WIDTH);   // TFT dimensions from SystemConfig.h
     menuTft.setRotation(3);   // landscape
     menuTft.fillScreen(ST77XX_BLACK);
 
@@ -2619,49 +2584,7 @@ void drawSDMatrix(bool drumArr[16], bool synthArr[16]) {
 }
 
 //todo: remove
-void updateSynthSwitches(){
-menu.newSynthState = 0;
-for (int i = 0; i < 16; i++) {
-  bool channelState = (mcpMIDI.digitalRead(midiPins[i]) == LOW);
-  menu.synthMIDIenabled[i] = channelState;
-  if (channelState) {
-    menu.newSynthState |= (1 << i);
-  } else {
-    menu.newSynthState &= ~(1 << i);  // clear bit if switch is off
-  }
-}
-if (menu.newSynthState != menu.oldSynthState) {
-  menu.oldSynthState = menu.newSynthState;
-  drawSDMatrix(menu.drumMIDIenabled, menu.synthMIDIenabled);  // you can update arrays too if needed
-  // Save newSynthState to EEPROM as uint16_t
-  EEPROM.write(EEPROM_ADDR_MAGIC, EEPROM_MAGIC); // Write magic byte
-  EEPROM.put(EEPROM_ADDR_SYNTH_STATE, menu.newSynthState);
-  Serial.println("Wrote synth state to EEPROM");
-}
-}
 
-void updateDrumSwitches(){
-menu.newDrumState = 0;
-for (int i = 0; i < 16; i++) {
-  bool channelState = (mcpMIDI.digitalRead(midiPins[i]) == LOW);
-  menu.drumMIDIenabled[i] = channelState;
-  if (channelState) {
-    menu.newDrumState |= (1 << i);
-  } else {
-    menu.newDrumState &= ~(1 << i);  // clear bit if switch is off
-  }
-}
-if (menu.newDrumState != menu.oldDrumState) {
-  menu.oldDrumState = menu.newDrumState;
-  drawSDMatrix(menu.drumMIDIenabled, menu.synthMIDIenabled);  // you can update arrays too if needed
-  // Save newDrumState to EEPROM as uint16_t
-  EEPROM.write(EEPROM_ADDR_MAGIC, EEPROM_MAGIC); // Write magic byte
-  EEPROM.put(EEPROM_ADDR_DRUM_STATE, menu.newDrumState);
-  Serial.println("Wrote drum state to EEPROM");
-}
-Serial.println("Refreshing drum machines...");
-refreshDrumMachines();
-}
 
 
 void drawStretchDisplay(){

@@ -51,6 +51,34 @@ MIDImorphose is a PlatformIO-based Arduino project for the Teensy 4.1 board. It 
 - **Potentiometer:**
   - Stretch potentiometer (pin A17)
 
+## Build Environments
+
+The project supports multiple hardware configurations through PlatformIO build environments:
+
+- **`foam_case`**: For smaller TFT displays (135x240 pixels)
+- **`hard_case`**: For larger TFT displays (240x280 pixels) 
+- **`teensy41`**: Legacy environment (defaults to foam_case configuration)
+
+### Switching Build Environments
+
+**In VS Code:**
+1. Look at the bottom status bar in VS Code
+2. Click on the current environment name (e.g., `foam_case`)
+3. Select your desired environment from the dropdown
+
+**Command Line:**
+```bash
+# Build for foam case (135x240 display)
+pio run -e foam_case
+pio run -e foam_case --target upload
+
+# Build for hard case (240x280 display)  
+pio run -e hard_case
+pio run -e hard_case --target upload
+```
+
+The build system automatically configures display dimensions and UI scaling based on the selected environment.
+
 ## Usage
 
 1. **Stutter/Loop:** Use the stutter switch to start/stop looping MIDI events.

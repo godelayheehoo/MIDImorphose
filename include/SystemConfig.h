@@ -63,6 +63,45 @@ const byte MIDI_NOOP = 0x00;               // MIDI no-operation value
 #define SCREEN_WIDTH 128                    // OLED display width in pixels
 #define SCREEN_HEIGHT 64                    // OLED display height in pixels
 
+// TFT Display raw hardware dimensions (for init call) - conditional by case type
+#ifdef HARD_CASE
+  #define TFT_INIT_HEIGHT 240               // TFT hardware height (portrait) - Hard case
+  #define TFT_INIT_WIDTH 280                // TFT hardware width (portrait) - Hard case
+  // TFT Display dimensions (ST7789 in landscape mode, rotation 3)
+  #define TFT_WIDTH 280                     // TFT display width in pixels (landscape) - Hard case
+  #define TFT_HEIGHT 240                    // TFT display height in pixels (landscape) - Hard case
+#else  // FOAM_CASE or default
+  #define TFT_INIT_HEIGHT 135               // TFT hardware height (portrait) - Foam case
+  #define TFT_INIT_WIDTH 240                // TFT hardware width (portrait) - Foam case
+  // TFT Display dimensions (ST7789 in landscape mode, rotation 3)
+  #define TFT_WIDTH 240                     // TFT display width in pixels (landscape) - Foam case
+  #define TFT_HEIGHT 135                    // TFT display height in pixels (landscape) - Foam case
+#endif
+
+// TFT UI positioning constants (relative to TFT_WIDTH and TFT_HEIGHT)
+#ifdef HARD_CASE
+  // Larger margins for rounded corner display
+  #define MARGIN_LEFT 20                    // Left margin for text - avoid rounded corners
+  #define MARGIN_TOP 20                     // Top margin for text - avoid rounded corners
+  #define MARGIN_RIGHT 20                   // Right margin for text - avoid rounded corners
+  #define MARGIN_BOTTOM 25                  // Bottom margin - avoid rounded corners
+#else  // FOAM_CASE or default
+  #define MARGIN_LEFT 10                    // Left margin for text
+  #define MARGIN_TOP 10                     // Top margin for text
+  #define MARGIN_RIGHT 10                   // Right margin for text
+  #define MARGIN_BOTTOM 15                  // Bottom margin
+#endif
+
+#define LINE_HEIGHT 15                      // Height between text lines
+#define BUTTON_Y (TFT_HEIGHT - MARGIN_BOTTOM - 15)  // Y position for bottom buttons
+#define BOTTOM_LINE (TFT_HEIGHT - MARGIN_BOTTOM)    // Y position for bottom status text
+
+// Menu visible options calculation
+#define MENU_BOTTOM_RESERVE 50              // Reserved space for buttons/navigation
+#define USABLE_MENU_HEIGHT (TFT_HEIGHT - MARGIN_TOP - MENU_BOTTOM_RESERVE)
+#define MAX_VISIBLE_OPTIONS (USABLE_MENU_HEIGHT / LINE_HEIGHT)
+#define SAFE_VISIBLE_OPTIONS (MAX_VISIBLE_OPTIONS - 1)  // Conservative with buffer
+
 // -----------------------------------------------------------------------------
 // KEYPAD MATRIX CONFIGURATION
 // -----------------------------------------------------------------------------

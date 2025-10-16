@@ -2,6 +2,7 @@
 #pragma once
 #include <Adafruit_ST7789.h>
 #include "EEPROMAddresses.h"
+#include "SystemConfig.h"
 
 class MenuManager;
 
@@ -271,7 +272,7 @@ public:
     int mainMenuSelectedIdx = 0;
     int channelConfigSelectedIdx = 0;
     int mainMenuScrollIdx = 0;
-    static const int MAIN_MENU_VISIBLE_ITEMS = 3;
+    static const int MAIN_MENU_VISIBLE_ITEMS = SAFE_VISIBLE_OPTIONS;
     // Retrigger Synth menu selection
     int retriggerSynthSelectedIdx = 0; // 0 = '...', 1 = Enabled, 2 = Disabled
     static const int RETRIGGER_SYNTH_TOTAL_ITEMS = 3;
@@ -302,14 +303,14 @@ public:
     // Stutter Length menu selection
     int stutterLengthSelectedIdx = 0; // 0 = '...', 1-16 = options
     int stutterLengthScrollIdx = 0;
-    static const int STUTTER_LENGTH_VISIBLE_OPTIONS = 3;
+    static const int STUTTER_LENGTH_VISIBLE_OPTIONS = SAFE_VISIBLE_OPTIONS;
     int stutterLengthActiveIdx = 1; // Active option, initially Option 1 (index 1)
     // Stutter length menu-held pulse resolution
     unsigned int pulseResolution = STUTTER_LENGTH_PULSE_RESOLUTIONS[9]; // Default to 1/4 note (index 9)
     // Offset menu selection
     int offsetSelectedIdx = 0; // 0 = '...', 1-4 = options
     int offsetScrollIdx = 0;
-    static const int OFFSET_VISIBLE_OPTIONS = 3;
+    static const int OFFSET_VISIBLE_OPTIONS = SAFE_VISIBLE_OPTIONS;
     int offsetActiveIdx = 1; // Active option, initially Option 1 (index 1)
     // Pointer to current offset set
     OffsetSet* currentOffsetSet; // Will be initialized in constructor

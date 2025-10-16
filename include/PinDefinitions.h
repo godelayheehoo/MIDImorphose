@@ -33,9 +33,18 @@
 #define PIN_TFT_CS              0   // TFT chip select
 #define PIN_TFT_DC              28  // TFT data/command
 #define PIN_TFT_RST             -1  // TFT reset (-1 = share Arduino reset)
+// SPI1 Hardware Pins (fixed on Teensy 4.1):
+//   MOSI (SDA) = Pin 26
+//   SCK (SCL)  = Pin 27  
+//   MISO       = Pin 1 (not used for TFT)
 
 // OLED Display (SSD1306) - Uses Wire2 (I2C)
 #define PIN_OLED_RESET          -1  // OLED reset pin (-1 = share Arduino reset)
+
+// I2C Bus Pins (Wire2 - used by OLED and MCP23017 expanders)
+// Wire2 Hardware Pins (fixed on Teensy 4.1):
+//   SDA = Pin 25
+//   SCL = Pin 24
 
 // -----------------------------------------------------------------------------
 // ANALOG INPUTS  
@@ -72,27 +81,6 @@
 #define MCP_KEYPAD_ROW3         13
 #define MCP_KEYPAD_ROW4         12
 
-// -----------------------------------------------------------------------------
-// MIDI CHANNEL DIPSWITCHES (MCP23X17 Pins)
-// -----------------------------------------------------------------------------
-// MIDI channels 1-16 mapped to MCP23X17 pins
-// These correspond to the midiPins array in MIDI_Glitcher.cpp
-#define MCP_MIDI_CH1            0   // MIDI channel 1
-#define MCP_MIDI_CH2            1   // MIDI channel 2  
-#define MCP_MIDI_CH3            2   // MIDI channel 3
-#define MCP_MIDI_CH4            3   // MIDI channel 4
-#define MCP_MIDI_CH5            4   // MIDI channel 5
-#define MCP_MIDI_CH6            5   // MIDI channel 6
-#define MCP_MIDI_CH7            6   // MIDI channel 7
-#define MCP_MIDI_CH8            7   // MIDI channel 8
-#define MCP_MIDI_CH9            15  // MIDI channel 9
-#define MCP_MIDI_CH10           14  // MIDI channel 10
-#define MCP_MIDI_CH11           13  // MIDI channel 11
-#define MCP_MIDI_CH12           12  // MIDI channel 12
-#define MCP_MIDI_CH13           11  // MIDI channel 13
-#define MCP_MIDI_CH14           10  // MIDI channel 14
-#define MCP_MIDI_CH15           9   // MIDI channel 15
-#define MCP_MIDI_CH16           8   // MIDI channel 16
 
 // -----------------------------------------------------------------------------
 // PIN ARRAYS FOR EASY ITERATION
@@ -100,14 +88,6 @@
 // Keypad pin arrays (for use with matrix keypad library)
 static const uint8_t KEYPAD_COL_PINS[4] = {MCP_KEYPAD_COL1, MCP_KEYPAD_COL2, MCP_KEYPAD_COL3, MCP_KEYPAD_COL4};
 static const uint8_t KEYPAD_ROW_PINS[4] = {MCP_KEYPAD_ROW1, MCP_KEYPAD_ROW2, MCP_KEYPAD_ROW3, MCP_KEYPAD_ROW4};
-
-// MIDI channel pin mapping array (for use with dipswitch reading)
-static const uint8_t MIDI_CHANNEL_PINS[16] = {
-    MCP_MIDI_CH1,  MCP_MIDI_CH2,  MCP_MIDI_CH3,  MCP_MIDI_CH4,
-    MCP_MIDI_CH5,  MCP_MIDI_CH6,  MCP_MIDI_CH7,  MCP_MIDI_CH8,
-    MCP_MIDI_CH9,  MCP_MIDI_CH10, MCP_MIDI_CH11, MCP_MIDI_CH12,
-    MCP_MIDI_CH13, MCP_MIDI_CH14, MCP_MIDI_CH15, MCP_MIDI_CH16
-};
 
 // Menu control pin array (for easy iteration if needed)
 static const uint8_t MENU_CONTROL_PINS[5] = {MCP_MENU_RIGHT, MCP_MENU_LEFT, MCP_MENU_UP, MCP_MENU_DOWN, MCP_MENU_SELECT};
