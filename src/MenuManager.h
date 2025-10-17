@@ -124,6 +124,11 @@ public:
     MenuManager(Adafruit_ST7789& display);
     void render();
     void handleInput(MenuButton btn);
+    
+    // Text centering helper functions
+    void centerTextAt(int y, String text, int textSize = 2);
+    void centerTextInContent(String text, int textSize = 2);
+    
     void handleJitterKeypad(char key); // For NOTE_JITTER_PROB_MENU
     void handleDrumJitterKeypad(char key); // For DRUM_JITTER_PROB_MENU
     void handleRetriggerKeypad(char key); // For RETRIGGER_PROB_MENU

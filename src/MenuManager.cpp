@@ -143,6 +143,38 @@ MenuManager::MenuManager(Adafruit_ST7789& display) : tft(display), currentMenu(M
     currentOffsetSet = &OFFSET_SETS[2]; // Default to Major Offset
 }
 
+// Text centering helper functions
+void MenuManager::centerTextAt(int y, String text, int textSize) {
+    tft.setTextSize(textSize);
+    int16_t x1, y1;
+    uint16_t w, h;
+    
+    // Get text bounds
+    tft.getTextBounds(text, 0, 0, &x1, &y1, &w, &h);
+    
+    // Calculate center X position
+    int x = CENTER_X(w);
+    
+    tft.setCursor(x, y);
+    tft.print(text);
+}
+
+void MenuManager::centerTextInContent(String text, int textSize) {
+    tft.setTextSize(textSize);
+    int16_t x1, y1;
+    uint16_t w, h;
+    
+    // Get text bounds
+    tft.getTextBounds(text, 0, 0, &x1, &y1, &w, &h);
+    
+    // Calculate center position within usable content area
+    int x = MARGIN_LEFT + (USABLE_WIDTH - w) / 2;
+    int y = MARGIN_TOP + (USABLE_HEIGHT - h) / 2;
+    
+    tft.setCursor(x, y);
+    tft.print(text);
+}
+
 
 void MenuManager::handleInput(MenuButton btn) {
     // Map button to handler index
@@ -537,11 +569,11 @@ else{
         else{tft.setTextColor(ST77XX_WHITE, ST77XX_BLACK);}
         tft.print("...");
         //instructions at bottom
-        tft.setCursor(10,120);
+        tft.setCursor(10,BOTTOM_LINE-MARGIN_BOTTOM);
         tft.setTextColor(ST77XX_YELLOW,ST77XX_BLACK);
         tft.print("Select to cycle, exit to save");
 
-        tft.setTextSize(3);
+        tft.setTextSize(LARGE_TEXT_SIZE);
         // print channel
         tft.setTextColor(ST77XX_MAGENTA);
         tft.setCursor(40,80);
@@ -619,29 +651,31 @@ void MenuManager::renderProbabilityMenu(const char* title, const String& inputBu
     // Title at top
     tft.setTextSize(2);
     tft.setTextColor(ST77XX_WHITE);
-    tft.setCursor(10, 10);
+    tft.setCursor(MARGIN_LEFT, MARGIN_TOP);
     tft.print(title);
 
     // '...' at top, always highlighted
     tft.setTextSize(2);
-    tft.setCursor(10, 40);
+    tft.setCursor(MARGIN_LEFT, MARGIN_TOP + 30);
     tft.setTextColor(ST77XX_BLACK, ST77XX_WHITE);
     tft.print("...");
 
     // Number in middle, always cyan
-    tft.setTextSize(3);
-    tft.setCursor(40, 80);
+    // tft.setTextSize(LARGE_TEXT_SIZE);
+    // tft.setCursor(40, 80);
     tft.setTextColor(ST77XX_CYAN, ST77XX_BLACK);
     if (inputBuffer.length() > 0) {
-        tft.print(inputBuffer);
+        // tft.print(inputBuffer);
+        centerTextInContent(inputBuffer, LARGE_TEXT_SIZE);
     } else {
-        tft.print("0");
+        // tft.print("0");
+        centerTextInContent("0", LARGE_TEXT_SIZE);
     }
 
     // Instructions at bottom
     tft.setTextSize(1);
     tft.setTextColor(ST77XX_YELLOW);
-    tft.setCursor(10, 120);
+    tft.setCursor(MARGIN_LEFT, BOTTOM_LINE-MARGIN_BOTTOM);
     tft.print("press # when done, press * to restart");
 }
 

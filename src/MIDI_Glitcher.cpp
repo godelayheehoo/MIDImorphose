@@ -982,17 +982,17 @@ void setup() {
   menuTft.fillScreen(ST77XX_BLACK);
 
   menuTft.setTextColor(ST77XX_CYAN);
-  menuTft.setCursor(10, 10);
-  menuTft.setTextSize(2);
+  menuTft.setCursor(MARGIN_LEFT, MARGIN_TOP);
+  menuTft.setTextSize(3);
   menuTft.print(F("MIDI Glitcher"));
-  menuTft.setCursor(15,25);
+  menuTft.setCursor(MARGIN_LEFT+10, MARGIN_TOP + 10);
   menuTft.setTextColor(ST77XX_MAGENTA);
   menuTft.print(F("MIDI Glitcher"));
-  menuTft.setCursor(20,40);
+  menuTft.setCursor(MARGIN_LEFT + 20, MARGIN_TOP + 20);
   menuTft.setTextColor(ST77XX_YELLOW);
   menuTft.print(F("MIDI Glitcher"));
   //print "press select to start" in bottom right corner
-  menuTft.setCursor(135-24, 135-16);
+  menuTft.setCursor((MARGIN_LEFT - MARGIN_RIGHT) / 2, TFT_HEIGHT - MARGIN_BOTTOM - 16);
   menuTft.setTextColor(ST77XX_WHITE);
   menuTft.setTextSize(1);
   menuTft.print(F("Press Select to Start"));
@@ -1329,6 +1329,7 @@ void loop() {
 
   //first, check for shortcut buttons
   if (keypad.lastKeyPressed == 'A') {
+    Serial.println("Pressed A");
     reverseMidiBuffer(stutterBuffer);
     keypad.lastKeyPressed = 0;
   }
@@ -1385,28 +1386,28 @@ void loop() {
   if(menuDownButton.update()){
     menu.handleInput(BUTTON_DOWN);
     menu.render();
-    // Serial.println(F("Menu Down button pressed"));
+    Serial.println(F("Menu Down button pressed"));
   }
   if(menuUpButton.update()){
     menu.handleInput(BUTTON_UP);
     menu.render();
-    // Serial.println(F("Menu Up button pressed"));
+    Serial.println(F("Menu Up button pressed"));
   }
   if(menuLeftButton.update()){
     menu.handleInput(BUTTON_LEFT);
     menu.render();
-    // Serial.println(F("Menu Left button pressed"));
+    Serial.println(F("Menu Left button pressed"));
   }
   if(menuRightButton.update()){
     menu.handleInput(BUTTON_RIGHT);
     menu.render();
-    // Serial.println(F("Menu Right button pressed"));
+    Serial.println(F("Menu Right button pressed"));
   }
 
   if(menuSelectButton.update()){
     menu.handleInput(BUTTON_SELECT);
     menu.render();
-    // Serial.println(F("Menu Select button pressed"));
+    Serial.println(F("Menu Select button pressed"));
   }
   //end debug
 
@@ -1501,7 +1502,7 @@ if (panicButton.update()) {
     midiPanic();
 #ifdef DEBUG
     Serial.println(F("Panic!"));
-    Serial.println("Attempting to recoever tft...");
+    Serial.println("Attempting to recover tft...");
     SPI.end();            // tear down SPI
     delay(10);
     SPI.begin();          // reinit SPI

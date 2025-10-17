@@ -96,11 +96,29 @@ const byte MIDI_NOOP = 0x00;               // MIDI no-operation value
 #define BUTTON_Y (TFT_HEIGHT - MARGIN_BOTTOM - 15)  // Y position for bottom buttons
 #define BOTTOM_LINE (TFT_HEIGHT - MARGIN_BOTTOM)    // Y position for bottom status text
 
+// Text centering helpers
+#define CENTER_X(width) ((TFT_WIDTH - (width)) / 2)
+#define CENTER_Y(height) ((TFT_HEIGHT - (height)) / 2)
+#define USABLE_WIDTH (TFT_WIDTH - MARGIN_LEFT - MARGIN_RIGHT)
+#define USABLE_HEIGHT (TFT_HEIGHT - MARGIN_TOP - MARGIN_BOTTOM)
+#define CONTENT_CENTER_X (MARGIN_LEFT + USABLE_WIDTH / 2)
+#define CONTENT_CENTER_Y (MARGIN_TOP + USABLE_HEIGHT / 2)
+
 // Menu visible options calculation
 #define MENU_BOTTOM_RESERVE 50              // Reserved space for buttons/navigation
 #define USABLE_MENU_HEIGHT (TFT_HEIGHT - MARGIN_TOP - MENU_BOTTOM_RESERVE)
-#define MAX_VISIBLE_OPTIONS (USABLE_MENU_HEIGHT / LINE_HEIGHT)
-#define SAFE_VISIBLE_OPTIONS (MAX_VISIBLE_OPTIONS - 1)  // Conservative with buffer
+// #define MAX_VISIBLE_OPTIONS (USABLE_MENU_HEIGHT / LINE_HEIGHT)
+// #define SAFE_VISIBLE_OPTIONS (MAX_VISIBLE_OPTIONS - 1)  // Conservative with buffer
+#ifdef HARD_CASE
+  #define SAFE_VISIBLE_OPTIONS 6
+  #define MEDIUM_TEXT_SIZE 3
+  #define LARGE_TEXT_SIZE 4
+#endif
+#ifdef FOAM_CASE
+  #define SAFE_VISIBLE_OPTIONS 4
+  #define MEDIUM_TEXT_SIZE 2
+  #define LARGE_TEXT_SIZE 3
+#endif
 
 // -----------------------------------------------------------------------------
 // KEYPAD MATRIX CONFIGURATION
