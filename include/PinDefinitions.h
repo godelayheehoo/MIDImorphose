@@ -9,8 +9,8 @@
 // MIDI SERIAL CONNECTIONS
 // -----------------------------------------------------------------------------
 // These are hardware serial ports, not pin numbers
-#define MIDI_RX_SERIAL  Serial8  // Hardware serial for MIDI input
-#define MIDI_TX_SERIAL  Serial5  // Hardware serial for MIDI output
+#define MIDI_RX_SERIAL  Serial8  // Hardware serial for MIDI input [34]
+#define MIDI_TX_SERIAL  Serial5  // Hardware serial for MIDI output [20]
 
 // -----------------------------------------------------------------------------
 // BUTTONS AND SWITCHES (Direct Teensy Pins)
@@ -33,9 +33,9 @@
 #define PIN_TFT_CS              0   // TFT chip select
 #define PIN_TFT_DC              28  // TFT data/command
 #define PIN_TFT_RST             -1  // TFT reset (-1 = share Arduino reset)
-// SPI1 Hardware Pins (fixed on Teensy 4.1):
-//   MOSI (SDA) = Pin 26
-//   SCK (SCL)  = Pin 27  
+// SPI1 Hardware Pins (fixed on Teensy 4.1) -used for tft:
+//   MOSI (SDA) = Pin 26 
+//   SCK (SCL)  = Pin 27   
 //   MISO       = Pin 1 (not used for TFT)
 
 // OLED Display (SSD1306) - Uses Wire2 (I2C)
@@ -43,8 +43,8 @@
 
 // I2C Bus Pins (Wire2 - used by OLED and MCP23017 expanders)
 // Wire2 Hardware Pins (fixed on Teensy 4.1):
-//   SDA = Pin 25
-//   SCL = Pin 24
+//   SDA = Pin 25 [blue?]
+//   SCL = Pin 24 [yellow?]
 
 // -----------------------------------------------------------------------------
 // ANALOG INPUTS  

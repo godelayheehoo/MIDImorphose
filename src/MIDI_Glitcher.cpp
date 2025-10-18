@@ -935,12 +935,12 @@ void setup() {
   //display setup
   setupStatusDisplay();
   Serial.println(F("Setting pins"));
-  pinMode(PIN_STUTTER_SWITCH, INPUT); 
+  pinMode(PIN_STUTTER_SWITCH, INPUT_PULLUP); 
  
   panicButton.setup(PIN_PANIC_BUTTON);
 
   pinMode(PIN_BUFFER_FULL_LED, OUTPUT);
-  logButton.setup(PIN_LOG_BUTTON, INPUT);
+  logButton.setup(PIN_LOG_BUTTON, INPUT_PULLUP);
 
   retriggerSwitch.setup(PIN_RETRIGGER_SWITCH);
   jitterSwitch.setup(PIN_JITTER_SWITCH);
